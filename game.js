@@ -515,12 +515,13 @@ function tossKoban() {
 // ================= KOBAN SCATTER (great blessing) =================
 const kobanDrops = [];
 let kobanScattered = false;
+const kobanScatterMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.7, emissive: 0xffc9a0, emissiveIntensity: 0 });
 function kobanScatter() {
   if (kobanScattered) return; kobanScattered = true;
   const treads = [[0.3, -25.9, 2.0], [0.6, -26.55, 1.7], [0.9, -27.2, 1.5]];
   for (let i = 0; i < 10; i++) {
     const [ty, tz, hw] = treads[Math.floor(Math.random() * 3)];
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.022, 14), M.gold);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.022, 14), kobanScatterMat);
     m.rotation.y = Math.random() * 6.28;
     m.position.set((Math.random() * 2 - 1) * hw, ty + 1.4, tz + (Math.random() - 0.5) * 0.4);
     m.castShadow = true; world.add(m);
@@ -1125,6 +1126,7 @@ function updateDawn(T, dt) {
   moon.color.lerpColors(dawnFrom.moon, DAWN_TO.moon, e); moon.intensity = dawnFrom.moonI + e * 0.45;
   dusk.intensity = dawnFrom.duskI + e * 0.4;
   for (const rm of kairoRidges) rm.emissiveIntensity = e * 1.0;
+  kobanScatterMat.emissiveIntensity = e * 0.7;
   if (dawnT > 0.6 && Math.random() < dt * 0.22) {
     // first birds: two-note chirps, sparse
     const b = 3100 + Math.random() * 1100;
