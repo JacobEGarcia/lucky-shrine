@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lucky Shrine - 福の神社</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%23c73a24'>福</text></svg>">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d0b09;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-weight:300}
+  .serif,#start h1,#start .jp,#win h2,#win p{font-family:'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP','Songti SC',serif}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+  #title{position:fixed;left:50%;top:30px;transform:translateX(-50%);font-size:14px;letter-spacing:8px;color:#e8dfc8;opacity:.85;z-index:3;pointer-events:none}
+  #title small{display:block;text-align:center;font-size:10px;letter-spacing:5px;color:#c9a86a;margin-top:5px}
+  #hint{position:fixed;left:50%;bottom:18%;transform:translateX(-50%);display:none;padding:7px 16px;border:1px solid rgba(232,223,200,.4);color:#e8dfc8;font-size:12px;letter-spacing:3px;z-index:3;pointer-events:none;background:rgba(13,11,9,.55)}
+  #sub{position:fixed;left:50%;bottom:9%;transform:translateX(-50%);max-width:640px;width:88%;display:none;padding:12px 18px;background:rgba(13,11,9,.78);border-left:2px solid #c73a24;color:#f0e9d8;font-size:15px;line-height:1.5;z-index:3;pointer-events:none}
+  #sub .who{color:#c9a86a;letter-spacing:2px;font-size:11px;display:block;margin-bottom:3px}
+  #start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:20;background:radial-gradient(ellipse at 50% 40%, #241c14 0%, #0d0b09 75%);color:#e8dfc8;cursor:pointer;transition:opacity .6s}
+  #start h1{font-weight:400;font-size:36px;letter-spacing:14px;margin:0 0 6px;color:#f0e9d8}
+  #start h1 b{color:#c73a24;font-weight:400}
+  #start .jp{font-size:15px;letter-spacing:10px;color:#c9a86a;margin-bottom:38px}
+  #start .go{font-size:12px;letter-spacing:4px;border:1px solid rgba(201,168,106,.55);padding:11px 30px;color:#e8dfc8}
+  #start .foot{position:absolute;bottom:26px;font-size:10px;letter-spacing:3px;color:#8a7f68}
+  #fadeblk{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:1;background:#0d0b09}
+  #win{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(13,11,9,.9);z-index:9;text-align:center;opacity:0;transition:opacity .8s ease;color:#f0e9d8}
+  #win h2{letter-spacing:10px;font-size:30px;font-weight:400;color:#e8c96a;margin:0 0 10px}
+  #win p{letter-spacing:2px;font-size:16px;color:#d8cfb8;max-width:520px;line-height:2.0;font-weight:400}
+  #win.dawn{background:rgba(38,26,26,.92);transition:opacity .8s ease, background 3s ease}
+  #win.dawn h2{color:#f0b878}
+  #win p .meta{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;letter-spacing:5px}
+  #koban{position:fixed;left:26px;bottom:22px;z-index:3;pointer-events:none;font-size:12px;letter-spacing:4px;color:#c9a86a}
+  #koban span{display:inline-block;margin-right:7px}
+  #omikuji{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;z-index:10;
+    background:#f5f1e8;color:#16130e;padding:34px 44px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,.6);
+    font-family:'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif}
+  #omikuji .tier{font-size:44px;letter-spacing:12px;color:#c73a24;margin-bottom:14px;font-weight:600}
+  #omikuji .line{font-size:15px;letter-spacing:1px;line-height:1.9;max-width:340px}
+  #omikuji .meta2{margin-top:16px;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:4px;color:#8a7f68}
+  #stick{position:fixed;left:30px;bottom:60px;width:110px;height:110px;border:1px solid rgba(232,223,200,.35);border-radius:50%;display:none;z-index:4;pointer-events:none}
+  #nub{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(232,223,200,.28)}
+  #gallerybtn{position:fixed;left:26px;bottom:60px;display:none;z-index:4;padding:8px 18px;border:1px solid rgba(201,162,39,.55);
+    color:#e8c96a;font-size:11px;letter-spacing:4px;cursor:pointer;background:rgba(13,11,9,.5);user-select:none;-webkit-user-select:none}
+  #ema{position:fixed;inset:0;display:none;z-index:29;background:rgba(13,11,9,.88);
+    font-family:'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif;color:#f0e9d8;text-align:center}
+  #ema .et{margin-top:22vh;font-size:40px;letter-spacing:14px;color:#c9a227}
+  #ema .es{margin-top:14px;font-size:12px;letter-spacing:3px;color:#d8cfb8;opacity:.75}
+  #ema input{margin-top:34px;width:min(420px,80vw);background:transparent;border:none;border-bottom:1px solid rgba(201,162,39,.6);
+    color:#f0e9d8;font-family:inherit;font-size:20px;letter-spacing:2px;text-align:center;padding:10px 4px;outline:none}
+  #ema input::placeholder{color:#8a7f68}
+  #ema .em{margin-top:26px;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:4px;color:#8a7f68}
+  #gallery{position:fixed;inset:0;display:none;z-index:30;background:rgba(13,11,9,.92);overflow-y:auto;padding:60px 0;
+    font-family:'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif;color:#f0e9d8;text-align:center}
+  #gallery .gt{font-size:26px;letter-spacing:10px;color:#c9a227;margin-bottom:30px}
+  #gallery .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;max-width:860px;margin:0 auto;padding:0 24px}
+  #gallery .card{border:1px solid rgba(201,162,39,.3);padding:18px 14px;background:rgba(245,241,232,.04)}
+  #gallery .card .t{font-size:24px;letter-spacing:6px;color:#c73a24;margin-bottom:8px}
+  #gallery .card .l{font-size:13px;line-height:1.8;color:#d8cfb8}
+  #gallery .card.miss{opacity:.35}
+  #gallery .card.miss .t{color:#8a7f68}
+  #gallery .gm{margin-top:34px;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:4px;color:#8a7f68}
+  #sharebtn{position:fixed;right:26px;bottom:22px;display:none;z-index:4;padding:8px 18px;border:1px solid rgba(201,162,39,.55);
+    color:#e8c96a;font-size:11px;letter-spacing:4px;cursor:pointer;background:rgba(13,11,9,.5);user-select:none;-webkit-user-select:none}
+  #ebtn{position:fixed;right:30px;bottom:70px;width:66px;height:66px;border-radius:50%;display:none;z-index:4;
+    border:1px solid rgba(201,162,39,.6);color:#e8c96a;font-size:20px;letter-spacing:0;text-align:center;line-height:66px;
+    font-family:'Hiragino Mincho ProN','Yu Mincho',serif;background:rgba(13,11,9,.4);user-select:none;-webkit-user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="fadeblk"></div>
+<div id="title">LUCKY SHRINE<small>福 の 神 社</small></div>
+<div id="hint"></div>
+<div id="sub"><span class="who"></span><span class="line"></span></div>
+<div id="win"><h2></h2><p></p></div>
+<div id="koban"></div>
+<div id="sharebtn">共 有 · SHARE</div>
+<div id="gallerybtn">一 覧 · OMIKUJI</div>
+<div id="ema"><div class="et">絵 馬</div><div class="es">WRITE A WISH. THE SHRINE KEEPS IT.</div>
+  <input id="emainput" maxlength="40" placeholder="your wish" autocomplete="off" spellcheck="false">
+  <div class="em">ENTER TO HANG IT · ESC TO KEEP IT IN YOUR HEART</div></div>
+<div id="gallery"><div class="gt">おみくじ帖</div><div class="grid"></div><div class="gm">E OR CLICK TO CLOSE</div></div>
+<div id="stick"><div id="nub"></div></div>
+<div id="ebtn">E</div>
+<div id="omikuji"><div class="tier"></div><div class="line"></div><div class="meta2"></div></div>
+<div id="start">
+  <h1>LUCKY <b>SHRINE</b></h1>
+  <div class="jp">福 の 神 社</div>
+  <div class="go">CLICK TO APPROACH &nbsp;·&nbsp; 近づく</div>
+  <div class="foot" id="controlsfoot">WASD WALK · MOUSE LOOK · E OFFER &nbsp;|&nbsp; A LUCKY CAT VENTURE</div>
+</div>
+<script type="module" src="game.js"></script>
+</body>
+</html>
