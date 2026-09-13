@@ -883,6 +883,7 @@ function updateBasin(dt) {
 
 // ================= RAIN (season=rain) =================
 let rainGeo = null, rainPos = null, rainVel = null;
+let dripGeo = null, dripPos = null, dripVel = null, dripWait = null, dripX = null, dripZ = null;
 if (SEASON === 'rain') {
   const RN = 340;
   rainPos = new Float32Array(RN * 6); rainVel = new Float32Array(RN);
@@ -901,6 +902,20 @@ if (SEASON === 'rain') {
     const p = new THREE.Mesh(new THREE.CircleGeometry(pr, 16), pudMat);
     p.rotation.x = -Math.PI / 2; p.position.set(px, 0.115, pz); world.add(p);
   });
+  // eave drips off the kairo walkways: gather, fall straight, hold
+  const DN = 44;
+  dripPos = new Float32Array(DN * 6); dripVel = new Float32Array(DN); dripWait = new Float32Array(DN); dripX = new Float32Array(DN); dripZ = new Float32Array(DN);
+  for (let i = 0; i < DN; i++) {
+    dripX[i] = (i % 2 ? 1 : -1) * 11.27 + (Math.random() - 0.5) * 0.1;
+    dripZ[i] = 10 - Math.random() * 41;
+    dripWait[i] = Math.random() * 2.4;
+    dripVel[i] = 5.2 + Math.random() * 1.6;
+    dripPos[i * 6] = dripX[i]; dripPos[i * 6 + 1] = -1; dripPos[i * 6 + 2] = dripZ[i];
+    dripPos[i * 6 + 3] = dripX[i]; dripPos[i * 6 + 4] = -1; dripPos[i * 6 + 5] = dripZ[i];
+  }
+  dripGeo = new THREE.BufferGeometry();
+  dripGeo.setAttribute('position', new THREE.BufferAttribute(dripPos, 3));
+  world.add(new THREE.LineSegments(dripGeo, new THREE.LineBasicMaterial({ color: 0xaec6d8, transparent: true, opacity: 0.5 })));
 }
 function updateRain(dt) {
   if (!rainGeo) return;
@@ -913,6 +928,17 @@ function updateRain(dt) {
     rainPos[i * 6 + 3] = rainPos[i * 6] + 0.06; rainPos[i * 6 + 4] = rainPos[i * 6 + 1] + 0.38; rainPos[i * 6 + 5] = rainPos[i * 6 + 2];
   }
   rainGeo.attributes.position.needsUpdate = true;
+  // eave drips: wait at the lip, then fall
+  for (let i = 0; i < dripVel.length; i++) {
+    if (dripWait[i] > 0) { dripWait[i] -= dt; continue; }
+    let y = dripPos[i * 6 + 1];
+    if (y < 0) { y = 2.69; }
+    y -= dripVel[i] * dt;
+    if (y < 0.05) { dripWait[i] = 0.4 + Math.random() * 2.6; y = -1; }
+    dripPos[i * 6] = dripX[i]; dripPos[i * 6 + 1] = y; dripPos[i * 6 + 2] = dripZ[i];
+    dripPos[i * 6 + 3] = dripX[i]; dripPos[i * 6 + 4] = y + 0.14; dripPos[i * 6 + 5] = dripZ[i];
+  }
+  if (dripGeo) dripGeo.attributes.position.needsUpdate = true;
 }
 
 // ================= KITSUNE GUARDIANS =================
