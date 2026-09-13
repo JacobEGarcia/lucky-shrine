@@ -782,7 +782,15 @@ function emaTexture(text) {
   const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
 }
 const EMA2_POS = [-4.1, 0, -23.2];
-let ema2Built = false, ema2Spoke = false;
+const EMA3_POS = [-6.3, 0, -24.3];
+let ema2Built = false, ema2Spoke = false, ema3Built = false, ema3Spoke = false;
+function buildEmaRack3() {
+  if (ema3Built) return; ema3Built = true;
+  addCyl(EMA3_POS[0] - 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, M.wood);
+  addCyl(EMA3_POS[0] + 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, M.wood);
+  const bar = addCyl(EMA3_POS[0], 1.85, EMA3_POS[2], 0.04, 0.04, 1.7, M.wood); bar.rotation.z = Math.PI / 2;
+  colliders.push({ min: new THREE.Vector3(EMA3_POS[0] - 0.9, 0, EMA3_POS[2] - 0.15), max: new THREE.Vector3(EMA3_POS[0] + 0.9, 2, EMA3_POS[2] + 0.15) });
+}
 function buildEmaRack2() {
   if (ema2Built) return; ema2Built = true;
   addCyl(EMA2_POS[0] - 0.8, 1.0, EMA2_POS[2], 0.05, 0.06, 2.0, M.wood);
@@ -802,7 +810,13 @@ function renderEmaRack(list, base, key) {
 function renderEma() {
   for (const p of emaPlaques) world.remove(p);
   emaPlaques.length = 0;
-  if (emaWishes.length > 12) {
+  if (emaWishes.length > 24) {
+    buildEmaRack2(); buildEmaRack3();
+    const all = emaWishes.slice(-36);
+    renderEmaRack(all.slice(0, 12), EMA_POS, 0);
+    renderEmaRack(all.slice(12, 24), EMA2_POS, 4.7);
+    renderEmaRack(all.slice(24), EMA3_POS, 9.1);
+  } else if (emaWishes.length > 12) {
     buildEmaRack2();
     const all = emaWishes.slice(-24);
     renderEmaRack(all.slice(0, 12), EMA_POS, 0);
@@ -822,7 +836,8 @@ emaInput.addEventListener('keydown', e => {
     if (w) {
       emaWishes.push(w); try { localStorage.setItem('ls_ema', JSON.stringify(emaWishes.slice(-60))); } catch (err) {}
       renderEma(); tone(880, 879, 'sine', 1.2, 0.1);
-      if (ema2Built && !ema2Spoke) { ema2Spoke = true; say('THE EMA RACK', 'One rack was not enough. It never is.', 4); }
+      if (ema3Built && !ema3Spoke) { ema3Spoke = true; say('THE EMA RACK', 'Three racks now. The wind has much to read.', 4); }
+      else if (ema2Built && !ema2Spoke) { ema2Spoke = true; say('THE EMA RACK', 'One rack was not enough. It never is.', 4); }
       else say('THE EMA RACK', 'The wood holds it now. The wind will read it first.', 4);
     }
     emaOpenSet(false);
