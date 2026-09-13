@@ -512,6 +512,35 @@ function tossKoban() {
   }, 700);
 }
 
+// ================= KOBAN SCATTER (great blessing) =================
+const kobanDrops = [];
+let kobanScattered = false;
+function kobanScatter() {
+  if (kobanScattered) return; kobanScattered = true;
+  const treads = [[0.3, -25.9, 2.0], [0.6, -26.55, 1.7], [0.9, -27.2, 1.5]];
+  for (let i = 0; i < 10; i++) {
+    const [ty, tz, hw] = treads[Math.floor(Math.random() * 3)];
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.022, 14), M.gold);
+    m.rotation.y = Math.random() * 6.28;
+    m.position.set((Math.random() * 2 - 1) * hw, ty + 1.4, tz + (Math.random() - 0.5) * 0.4);
+    m.castShadow = true; world.add(m);
+    kobanDrops.push({ m, y1: ty + 0.012, t: 0, delay: i * 0.12 });
+  }
+  [0, 2, 4, 7].forEach((n, i) => setTimeout(() => tone(523.25 * Math.pow(1.122, n), 523.25 * Math.pow(1.122, n), 'triangle', 0.5, 0.06), 250 + i * 130));
+  setTimeout(() => say('THE SHRINE', 'A great blessing pays for the stones too.', 4), 1800);
+}
+function updateKobanDrops(dt) {
+  for (const d of kobanDrops) {
+    if (d.done) continue;
+    if (d.delay > 0) { d.delay -= dt; continue; }
+    d.t = Math.min(1, d.t + dt * 2.2);
+    const fall = 1 - Math.pow(1 - d.t, 2);
+    const bounce = d.t >= 1 ? 0 : Math.abs(Math.sin(d.t * 9)) * 0.06 * (1 - d.t);
+    d.m.position.y = d.m.position.y + (d.y1 - d.m.position.y) * fall * 0.35 + bounce;
+    if (d.t >= 1) { d.m.position.y = d.y1; d.done = true; }
+  }
+}
+
 // ================= OMIKUJI =================
 const OMIKUJI = [
   ['大吉', 'Great blessing. The thing you want wants you back.'],
@@ -559,6 +588,7 @@ function drawOmikuji() {
   else { pick = remaining[Math.floor(Math.random() * remaining.length)]; omiDrawn.push(pick); try { localStorage.setItem('ls_omikuji', JSON.stringify(omiDrawn)); } catch (e) {} }
   const f = OMIKUJI[pick];
   lastDrawnTier = f[0];
+  if (f[0] === '\u5927\u5409') kobanScatter();
   omiEl.querySelector('.tier').textContent = f[0];
   omiEl.querySelector('.line').textContent = f[1];
   const curse = (f[0] === '凶' || f[0] === '大凶');
@@ -883,7 +913,7 @@ function updateBasin(dt) {
 
 // ================= RAIN (season=rain) =================
 let rainGeo = null, rainPos = null, rainVel = null;
-let dripGeo = null, dripPos = null, dripVel = null, dripWait = null, dripX = null, dripZ = null;
+let dripGeo = null, dripPos = null, dripVel = null, dripWait = null, dripX = null, dripZ = null, dripTop = null;
 if (SEASON === 'rain') {
   const RN = 340;
   rainPos = new Float32Array(RN * 6); rainVel = new Float32Array(RN);
@@ -903,11 +933,17 @@ if (SEASON === 'rain') {
     p.rotation.x = -Math.PI / 2; p.position.set(px, 0.115, pz); world.add(p);
   });
   // eave drips off the kairo walkways: gather, fall straight, hold
-  const DN = 44;
-  dripPos = new Float32Array(DN * 6); dripVel = new Float32Array(DN); dripWait = new Float32Array(DN); dripX = new Float32Array(DN); dripZ = new Float32Array(DN);
+  const DN = 62;
+  dripPos = new Float32Array(DN * 6); dripVel = new Float32Array(DN); dripWait = new Float32Array(DN); dripX = new Float32Array(DN); dripZ = new Float32Array(DN); dripTop = new Float32Array(DN);
   for (let i = 0; i < DN; i++) {
-    dripX[i] = (i % 2 ? 1 : -1) * 11.27 + (Math.random() - 0.5) * 0.1;
-    dripZ[i] = 10 - Math.random() * 41;
+    if (i < 44) {
+      dripX[i] = (i % 2 ? 1 : -1) * 11.27 + (Math.random() - 0.5) * 0.1;
+      dripZ[i] = 10 - Math.random() * 41; dripTop[i] = 2.69;
+    } else if (i < 53) {
+      dripX[i] = (Math.random() - 0.5) * 4.9; dripZ[i] = 6 + (Math.random() - 0.5) * 0.5; dripTop[i] = 4.95;
+    } else {
+      dripX[i] = (Math.random() - 0.5) * 4.0; dripZ[i] = -10 + (Math.random() - 0.5) * 0.45; dripTop[i] = 4.18;
+    }
     dripWait[i] = Math.random() * 2.4;
     dripVel[i] = 5.2 + Math.random() * 1.6;
     dripPos[i * 6] = dripX[i]; dripPos[i * 6 + 1] = -1; dripPos[i * 6 + 2] = dripZ[i];
@@ -932,7 +968,7 @@ function updateRain(dt) {
   for (let i = 0; i < dripVel.length; i++) {
     if (dripWait[i] > 0) { dripWait[i] -= dt; continue; }
     let y = dripPos[i * 6 + 1];
-    if (y < 0) { y = 2.69; }
+    if (y < 0) { y = dripTop[i]; }
     y -= dripVel[i] * dt;
     if (y < 0.05) { dripWait[i] = 0.4 + Math.random() * 2.6; y = -1; }
     dripPos[i * 6] = dripX[i]; dripPos[i * 6 + 1] = y; dripPos[i * 6 + 2] = dripZ[i];
@@ -1287,6 +1323,7 @@ function tick() {
     l.paper.material.emissiveIntensity = 1.6 + Math.sin(T * 9 + l.flick) * 0.25;
   }
   updateRain(dt);
+  updateKobanDrops(dt);
   updateBasin(dt);
   updateStars(dt);
   updateFurin(T, dt);
