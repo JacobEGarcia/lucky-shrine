@@ -1048,6 +1048,7 @@ window.__star = () => { starWait = 0; };
 const BASIN_POS = [2.3, 0, 8.5];
 let basinRipples = [];
 const pourMats = []; // v55: gutter spout streams, shimmered in updateBasin
+const spillMats = [], spillThreads = []; let spillRings = 0, spillT = 0; // v56: basin overflow after long rain
 {
   const stone = new THREE.MeshStandardMaterial({ color: 0x77726a, roughness: 0.9 });
   const water = new THREE.MeshStandardMaterial({ color: 0x2e3a42, roughness: 0.05, metalness: 0.4 });
@@ -1075,6 +1076,21 @@ function updateBasin(dt) {
   // rain season: drops dimple the kairo basins' water, rings blooming and fading
   if (SEASON === 'rain') {
     for (let i = 0; i < pourMats.length; i++) pourMats[i].opacity = (i % 2 ? 0.2 : 0.4) + Math.sin(performance.now() * 0.013 + i * 2.1) * 0.08;
+    // the basins fill over a long rain; past the brim they weep downhill and pool
+    const brimming = kairoDimples >= 400;
+    for (const sm of spillMats) sm.opacity += ((brimming ? 0.55 : 0) - sm.opacity) * Math.min(1, dt * 1.2);
+    for (const tm of spillThreads) tm.opacity += ((brimming ? 0.5 : 0) - tm.opacity) * Math.min(1, dt * 1.2);
+    if (brimming) {
+      spillT -= dt;
+      if (spillT <= 0) {
+        spillT = 1.2 + Math.random() * 0.8;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.02, 0.036, 12),
+          new THREE.MeshBasicMaterial({ color: 0xc8dce8, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2; ring.position.set(side * 10.62 + (Math.random() - 0.5) * 0.1, 0.117, -30.5 - Math.random() * 0.6);
+        world.add(ring); basinRipples.push({ m: ring, t: 0.7 }); spillRings++;
+      }
+    }
     kairoDimpleT -= dt;
     if (kairoDimpleT <= 0) {
       kairoDimpleT = 0.1 + Math.random() * 0.12;
@@ -1159,6 +1175,15 @@ if (SEASON === 'rain') {
     const churn = new THREE.Mesh(new THREE.CircleGeometry(0.07, 12), new THREE.MeshBasicMaterial({ color: 0xd4e6f2, transparent: true, opacity: 0.22 }));
     churn.rotation.x = -Math.PI / 2; churn.position.set(side * 10.62, 0.176, -30); world.add(churn);
     pourMats.push(churn.material);
+    // v56: after long rain the basin overfills - a wet rivulet runs downhill, pale thread on top
+    const spillMat = new THREE.MeshStandardMaterial({ color: 0x556270, roughness: 0.08, metalness: 0.55, transparent: true, opacity: 0 });
+    const spill = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 1.7), spillMat);
+    spill.rotation.x = -Math.PI / 2; spill.position.set(side * 10.62, 0.116, -30.85); world.add(spill);
+    spillMats.push(spillMat);
+    const threadMat = new THREE.MeshBasicMaterial({ color: 0xd4e6f2, transparent: true, opacity: 0 });
+    const thread = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 1.7), threadMat);
+    thread.rotation.x = -Math.PI / 2; thread.position.set(side * 10.62, 0.118, -30.85); world.add(thread);
+    spillThreads.push(threadMat);
   }
   const CN = 12;
   chainPos = new Float32Array(CN * 6); chainVel = new Float32Array(CN);
@@ -1468,6 +1493,7 @@ let poolDawnE = 0;
 let dawnFrom = null;
 const DAWN_TO = { bg: new THREE.Color(0x57404e), hemi: new THREE.Color(0xb89ab0), moon: new THREE.Color(0xffc9a0) };
 window.__dawn = j => { startDawn(); if (j) dawnT = j; };
+window.__flood = () => { kairoDimples = 400; return kairoDimples; };
 function startDawn() {
   dawnFrom = {
     bg: scene.background.clone(), fog: scene.fog.color.clone(),
@@ -1857,4 +1883,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3) });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1 });
