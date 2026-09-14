@@ -1051,15 +1051,31 @@ window.__star = () => { starWait = 0; };
 // ================= CHOZUYA (water basin) =================
 const BASIN_POS = [2.3, 0, 8.5];
 let basinRipples = [];
+let chozuWater = null, chozuFrost = null, basinWashes = 0, basinHushed = 0; // v61: the stilling
 const pourMats = []; // v55: gutter spout streams, shimmered in updateBasin
 const spillMats = [], spillThreads = []; let spillRings = 0, spillT = 0; // v56: basin overflow after long rain
 {
   const stone = new THREE.MeshStandardMaterial({ color: 0x77726a, roughness: 0.9 });
   const water = new THREE.MeshStandardMaterial({ color: 0x2e3a42, roughness: 0.05, metalness: 0.4 });
   addBox(BASIN_POS[0], 0.4, BASIN_POS[2], 0.9, 0.55, 0.6, stone);
-  const rim = addBox(BASIN_POS[0], 0.68, BASIN_POS[2], 0.98, 0.08, 0.68, stone, { noCollide: true });
+  // v61 audit catch: the rim was a solid slab and the water plane sat INSIDE it, invisible.
+  // Rebuilt as a frame of four rails so the water surface actually shows.
+  addBox(BASIN_POS[0] - 0.44, 0.68, BASIN_POS[2], 0.10, 0.08, 0.68, stone, { noCollide: true });
+  addBox(BASIN_POS[0] + 0.44, 0.68, BASIN_POS[2], 0.10, 0.08, 0.68, stone, { noCollide: true });
+  addBox(BASIN_POS[0], 0.68, BASIN_POS[2] - 0.295, 0.78, 0.08, 0.09, stone, { noCollide: true });
+  addBox(BASIN_POS[0], 0.68, BASIN_POS[2] + 0.295, 0.78, 0.08, 0.09, stone, { noCollide: true });
   const w = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.5), water);
   w.rotation.x = -Math.PI / 2; w.position.set(BASIN_POS[0], 0.7, BASIN_POS[2]); world.add(w);
+  chozuWater = water;
+  // v61: snow season stills the water skin - the mirror dies to a matte, and frost only
+  // whispers at the rim. First silence instead of first ice.
+  if (SEASON === 'snow') {
+    water.roughness = 0.58; water.metalness = 0.08; water.color.setHex(0x364249);
+    const frost = new THREE.Mesh(new THREE.RingGeometry(0.30, 0.40, 24),
+      new THREE.MeshBasicMaterial({ color: 0xdfe8ec, transparent: true, opacity: 0.22, side: THREE.DoubleSide }));
+    frost.rotation.x = -Math.PI / 2; frost.position.set(BASIN_POS[0], 0.703, BASIN_POS[2]); frost.scale.y = 0.64; // match the 0.78x0.5 water plane
+    world.add(frost); chozuFrost = frost;
+  }
   // bamboo ladle resting across the rim
   const bamboo = new THREE.MeshStandardMaterial({ color: 0xa8a86a, roughness: 0.8 });
   const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.5, 8), bamboo);
@@ -1069,12 +1085,18 @@ const spillMats = [], spillThreads = []; let spillRings = 0, spillT = 0; // v56:
   cup.position.set(BASIN_POS[0] + 0.22, 0.73, BASIN_POS[2] + 0.06); world.add(cup);
 }
 function washBasin() {
-  tone(1200, 300, 'sine', 0.7, 0.05); // poured water
+  basinWashes++;
+  const hushed = SEASON === 'snow'; // v61: the stilled skin answers quietly
+  if (hushed) basinHushed++;
+  if (hushed) tone(660, 240, 'sine', 0.45, 0.028); // water moving slowly, thinking about ice
+  else tone(1200, 300, 'sine', 0.7, 0.05); // poured water
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.08, 20),
-    new THREE.MeshBasicMaterial({ color: 0x9ab2c8, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+    new THREE.MeshBasicMaterial({ color: 0x9ab2c8, transparent: true, opacity: hushed ? 0.4 : 0.7, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2; ring.position.set(BASIN_POS[0], 0.71, BASIN_POS[2]);
-  world.add(ring); basinRipples.push({ m: ring, t: 1 });
-  say('THE BASIN', ['Wash the day off. The night listens better.', 'Cold water, warm road.', 'The ladle remembers every hand.'][Math.floor(Math.random() * 3)], 4);
+  world.add(ring); basinRipples.push({ m: ring, t: hushed ? 0.55 : 1 });
+  say('THE BASIN', hushed
+    ? ['The water moves slowly. It is thinking about ice.', 'The ladle dips and barely answers.', 'Cold on cold. The night approves.'][Math.floor(Math.random() * 3)]
+    : ['Wash the day off. The night listens better.', 'Cold water, warm road.', 'The ladle remembers every hand.'][Math.floor(Math.random() * 3)], 4);
 }
 function updateBasin(dt) {
   // rain season: drops dimple the kairo basins' water, rings blooming and fading
@@ -1124,6 +1146,7 @@ let flowGeo = null, flowPos = null, flowVel = null, chainGeo = null, chainPos = 
 let rackDripT = 0.8, kairoDimpleT = 0, kairoDimples = 0;
 let lastDimpleBias = 0; // v60: upwind offset of the latest basin ring, for QA
 let rainSlant = 0; // v59: how hard the gust wind is leaning the rain right now
+let slantHold = null; // v61: QA override - a number pins the wind lean, null returns it to the live breeze
 let dripGeo = null, dripPos = null, dripVel = null, dripWait = null, dripX = null, dripZ = null, dripTop = null;
 if (SEASON === 'rain') {
   const RN = 340;
@@ -1503,6 +1526,8 @@ const DAWN_TO = { bg: new THREE.Color(0x57404e), hemi: new THREE.Color(0xb89ab0)
 window.__dawn = j => { startDawn(); if (j) dawnT = j; };
 window.__flood = () => { kairoDimples = 400; return kairoDimples; };
 window.__slant = () => +rainSlant.toFixed(3);
+window.__slantHold = v => { slantHold = v; return slantHold; };
+window.__wash = () => { washBasin(); return __ls().washes; };
 function startDawn() {
   dawnFrom = {
     bg: scene.background.clone(), fog: scene.fog.color.clone(),
@@ -1589,7 +1614,7 @@ function updateFurin(T, dt) {
     furinBreeze = Math.min(1, 0.25 + furinBreeze * 0.65 + gust * 0.45);
   }
   // v59: the same envelope leans the rain itself - gusts tilt the streak field, then it settles upright
-  rainSlant += ((SEASON === 'rain' ? furinBreeze * 0.55 : 0) - rainSlant) * Math.min(1, dt * 2.0);
+  rainSlant += ((slantHold !== null ? slantHold : (SEASON === 'rain' ? furinBreeze * 0.55 : 0)) - rainSlant) * Math.min(1, dt * 2.0);
   const rainyF = SEASON === 'rain';
   for (const f of furins) {
     const sway = furinBreeze * furinBreeze;
@@ -1905,4 +1930,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3) });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed });
