@@ -142,6 +142,11 @@ let paws = 0;
 let snowHump = 0; // v83
 let humpKoban = 0; // v84
 let visitor = 0; // v85
+// v86: the snow keeps falling - refs for the slow self-burial of the hump scene
+const humpGrowMeshes = []; // {m, sx, sy, sz, gy}
+const visitorPrints = [];  // {m, op}
+let humpKobanMesh = null, humpKobanLip = null;
+let humpAcc = 0; try { humpAcc = Math.min(1, Math.max(0, +localStorage.getItem('ls_hump_acc') || 0)); } catch (e) {}
 if (SEASON === 'snow') {
   const pawGeo = new THREE.CircleGeometry(0.042, 8);
   let pseed = 9917;
@@ -190,6 +195,8 @@ if (SEASON === 'snow') {
     }
     const tail = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.05, 6, 10, Math.PI * 0.9), TORII_SNOW);
     tail.rotation.x = Math.PI / 2; tail.rotation.y = 0.6; tail.position.set(0.08, 0.07, 0.1); hg.add(tail); snowHump++;
+    for (const [gm, gy] of [[bed, 0.3], [body, 0.22], [head, 0.16], [tail, 0.14]]) humpGrowMeshes.push({ m: gm, sx: gm.scale.x, sy: gm.scale.y, sz: gm.scale.z, gy });
+    hg.children.filter(c => c.geometry.type === 'ConeGeometry').forEach(ear => humpGrowMeshes.push({ m: ear, sx: ear.scale.x, sy: ear.scale.y, sz: ear.scale.z, gy: -0.85 })); // ear tips vanish last
     // v84: a visitor noticed the shape and left one gold koban half-buried
     // against the drift's base, leaning on the bed beside the tail
     {
@@ -199,11 +206,13 @@ if (SEASON === 'snow') {
       kb.rotation.x = Math.PI / 2 - 1.12; // standing on edge, leaning back against the drift
       kb.rotation.z = 0.18;
       kb.position.set(0.47, 0.11, 0.06);
-      hg.add(kb); humpKoban++;
+      kb.userData.y0 = 0.11;
+      hg.add(kb); humpKoban++; humpKobanMesh = kb;
       // a small drift lip of snow over the coin's buried foot
       const lip = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), TORII_SNOW);
       lip.scale.set(1.3, 0.35, 0.8); lip.position.set(0.47, 0.03, 0.1);
-      hg.add(lip); humpKoban++;
+      lip.userData.base = [1.3, 0.35, 0.8];
+      hg.add(lip); humpKoban++; humpKobanLip = lip;
     }
     hg.position.set(4.3, 0, -29.0);
     hg.rotation.y = -0.5;
@@ -223,7 +232,7 @@ if (SEASON === 'snow') {
       fp.rotation.z = -dir;
       fp.scale.set(0.62, 1.45, 1);
       fp.position.set(x, 0.02, z);
-      world.add(fp); visitor++;
+      world.add(fp); visitor++; visitorPrints.push({ m: fp, op });
     };
     const vlat = i => (i % 2 === 0 ? 1 : -1) * 0.09;
     // approach
@@ -256,6 +265,31 @@ if (SEASON === 'snow') {
     }
   }
 }
+// v86: the snow keeps falling on the hump - over a long session the drift grows,
+// the koban sinks, the ear tips vanish, and the visitor's ring softens away
+let humpAccSaveT = 0;
+function applyAccum() {
+  const a = humpAcc;
+  for (const g of humpGrowMeshes) {
+    if (g.gy >= 0) g.m.scale.set(g.sx * (1 + a * g.gy * 0.6), g.sy * (1 + a * g.gy), g.sz * (1 + a * g.gy * 0.6));
+    else g.m.scale.set(g.sx, g.sy * Math.max(0.12, 1 + a * g.gy), g.sz); // ears sink into the drift
+  }
+  if (humpKobanMesh) humpKobanMesh.position.y = humpKobanMesh.userData.y0 - 0.048 * a;
+  if (humpKobanLip) {
+    const b = humpKobanLip.userData.base;
+    humpKobanLip.scale.set(b[0] * (1 + 0.9 * a), b[1] * (1 + 1.1 * a), b[2] * (1 + 0.9 * a));
+    humpKobanLip.position.y = 0.03 + 0.02 * a;
+  }
+  for (const p of visitorPrints) p.m.material.opacity = p.op * (1 - 0.55 * a);
+}
+function updateAccum(dt) {
+  if (SEASON !== 'snow' || !started || humpAcc >= 1) return;
+  humpAcc = Math.min(1, humpAcc + dt / 1200); // full bury after about twenty minutes under the snow
+  humpAccSaveT += dt;
+  if (humpAccSaveT > 5) { humpAccSaveT = 0; try { localStorage.setItem('ls_hump_acc', humpAcc.toFixed(3)); } catch (e) {} }
+  applyAccum();
+}
+if (SEASON === 'snow') applyAccum();
 // rain season wets the vermilion lacquer: deeper, darker, glossy - torii gates and the hall share the paint
 if (SEASON === 'rain') { M.woodR.color.setHex(0x6e241c); M.woodR.roughness = 0.35; }
 
@@ -2186,6 +2220,7 @@ function tick() {
   }
   updateRain(dt);
   updateKobanDrops(dt);
+  updateAccum(dt);
   updateBasin(dt);
   updateStars(dt);
   updateFurin(T, dt);
@@ -2364,4 +2399,5 @@ function fireBreath() {
 window.__drip = (mode) => { fireIceDrip(mode === 'near'); return glintCount; };
 window.__breath = () => { fireBreath(); return breathCount; };
 window.__rillFill = () => { rillLen = 32; return rillLen; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), paws, hump: snowHump, humpKoban, visitor });
+window.__accFill = v => { humpAcc = Math.min(1, Math.max(0, +v)); applyAccum(); };
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), paws, hump: snowHump, humpKoban, visitor, acc: +humpAcc.toFixed(2), accOp: visitorPrints.length ? +visitorPrints[0].m.material.opacity.toFixed(3) : -1 });
