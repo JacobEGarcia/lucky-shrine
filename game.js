@@ -1566,6 +1566,7 @@ window.__dawn = j => { startDawn(); if (j) dawnT = j; };
 window.__flood = () => { kairoDimples = 400; return kairoDimples; };
 window.__slant = () => +rainSlant.toFixed(3);
 window.__slantHold = v => { slantHold = v; return slantHold; };
+window.__furinPin = v => { furinPin = v; };
 window.__wash = () => { washBasin(); return __ls().washes; };
 function startDawn() {
   dawnFrom = {
@@ -1643,7 +1644,7 @@ const furins = [];
     furins.push({ g, strip, phase: i * 2.1, lastTinkle: 0 });
   }
 }
-let furinBreeze = 0, furinRattles = 0;
+let furinBreeze = 0, furinRattles = 0, furinHushed = 0, furinTinkles = 0, furinPin = null;
 function updateFurin(T, dt) {
   // slow layered breeze, 0..1
   furinBreeze = 0.5 + 0.5 * Math.sin(T * 0.13 + Math.sin(T * 0.043) * 2.2) * Math.sin(T * 0.031 + 1.7);
@@ -1653,6 +1654,7 @@ function updateFurin(T, dt) {
     furinBreeze = Math.min(1, 0.25 + furinBreeze * 0.65 + gust * 0.45);
   }
   // v59: the same envelope leans the rain itself - gusts tilt the streak field, then it settles upright
+  if (furinPin !== null) furinBreeze = furinPin; // QA pin: force the breeze envelope
   rainSlant += ((slantHold !== null ? slantHold : (SEASON === 'rain' ? furinBreeze * 0.55 : 0)) - rainSlant) * Math.min(1, dt * 2.0);
   const rainyF = SEASON === 'rain';
   for (const f of furins) {
@@ -1671,9 +1673,13 @@ function updateFurin(T, dt) {
       setTimeout(() => tone(base * (1.2 + Math.random() * 0.4), base, 'sine', 0.35, 0.022), 60 + Math.random() * 90);
     } else if (furinBreeze > 0.86 && T - f.lastTinkle > 7 && Math.random() < dt * 2) {
       f.lastTinkle = T;
-      const base = 2400 + Math.random() * 900;
-      tone(base, base * 0.995, 'sine', 1.6, 0.05);
-      tone(base * 1.51, base * 1.51, 'sine', 0.9, 0.02);
+      if (SEASON === 'snow') { furinHushed++; } // v65: the cold takes the chime's voice - sway stays, sound goes
+      else {
+        furinTinkles++;
+        const base = 2400 + Math.random() * 900;
+        tone(base, base * 0.995, 'sine', 1.6, 0.05);
+        tone(base * 1.51, base * 1.51, 'sine', 0.9, 0.02);
+      }
     }
   }
 }
@@ -1969,4 +1975,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps });
