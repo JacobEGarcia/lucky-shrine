@@ -287,6 +287,8 @@ function glowTexture(streak) {
   return new THREE.CanvasTexture(c);
 }
 const poolTex = glowTexture(false), streakTex = glowTexture(true);
+// v53: pools cool as the cat brings the morning - warm gold at night, dusty peach-rose at dawn
+const POOL_WARM = new THREE.Color(0xffffff), POOL_DAWN = new THREE.Color(0xd8c2d4);
 const lanterns = [];
 function stoneLantern(x, z) {
   const g = new THREE.Group();
@@ -1447,6 +1449,7 @@ let mossPostPatches = 0, sootBands = 0, verdPatches = 0;
 
 // ================= DAWN (the cat brings the morning) =================
 let dawnOn = false, dawnT = 0, dawnSpoke = false;
+let poolDawnE = 0;
 let dawnFrom = null;
 const DAWN_TO = { bg: new THREE.Color(0x57404e), hemi: new THREE.Color(0xb89ab0), moon: new THREE.Color(0xffc9a0) };
 window.__dawn = j => { startDawn(); if (j) dawnT = j; };
@@ -1481,6 +1484,11 @@ function updateDawn(T, dt) {
   hemi.color.lerpColors(dawnFrom.hemi, DAWN_TO.hemi, e); hemi.intensity = dawnFrom.hemiI + e * 0.55;
   moon.color.lerpColors(dawnFrom.moon, DAWN_TO.moon, e); moon.intensity = dawnFrom.moonI + e * 0.45;
   dusk.intensity = dawnFrom.duskI + e * 0.4;
+  poolDawnE = e;
+  for (const l of lanterns) {
+    l.pool.material.color.lerpColors(POOL_WARM, POOL_DAWN, e);
+    if (l.streak) l.streak.material.color.lerpColors(POOL_WARM, POOL_DAWN, e);
+  }
   for (const rm of kairoRidges) rm.emissiveIntensity = e * 1.0;
   kobanScatterMat.emissiveIntensity = e * 0.7;
   kobanTrailMat.emissiveIntensity = 0.28 + e * 0.5;
@@ -1715,8 +1723,8 @@ function tick() {
     l.light.intensity = 26 + Math.sin(T * 7 + l.flick) * 3.5 + Math.sin(T * 23 + l.flick * 3) * 1.5;
     l.paper.material.emissiveIntensity = 1.6 + Math.sin(T * 9 + l.flick) * 0.25;
     const poolFlick = 0.92 + Math.sin(T * 7 + l.flick) * 0.08 + Math.sin(T * 23 + l.flick * 3) * 0.04;
-    l.pool.material.opacity = (0.2 + poolWet * 0.34) * poolFlick;
-    if (l.streak) l.streak.material.opacity = 0.27 * poolFlick;
+    l.pool.material.opacity = (0.2 + poolWet * 0.34) * poolFlick * (1 - poolDawnE * 0.55);
+    if (l.streak) l.streak.material.opacity = 0.27 * poolFlick * (1 - poolDawnE * 0.55);
   }
   updateRain(dt);
   updateKobanDrops(dt);
@@ -1826,4 +1834,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2) });
