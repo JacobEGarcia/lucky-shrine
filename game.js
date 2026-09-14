@@ -526,14 +526,17 @@ if (kobanLife >= 10) {
     }
   });
 }
-const CAT_STEPS = [[3.6, 0, 6], [2.8, 0, -1], [1.9, 0, -8], [0.9, 0.3, -25.9]];
+// v58: in rain she keeps to the covered kairo, then makes one dash for the hall
+const CAT_STEPS = SEASON === 'rain'
+  ? [[8.4, 0, 7.5], [9.6, 0, -1], [9.6, 0, -9.5], [0.9, 0.3, -25.9]]
+  : [[3.6, 0, 6], [2.8, 0, -1], [1.9, 0, -8], [0.9, 0.3, -25.9]];
 function mew() { tone(700, 950, 'sine', 0.16, 0.1); setTimeout(() => tone(950, 620, 'sine', 0.22, 0.1), 130); }
 function awakenCat() {
   cat.state = 'approach'; cat.step = 0;
   const p = CAT_STEPS[0]; cat.g.position.set(p[0], p[1], p[2]);
   cat.g.visible = true; cat.waveT = 2.2;
   setTimeout(mew, 1200);
-  say('???', 'mew.', 2.5);
+  say('???', SEASON === 'rain' ? 'mew. From the dry side.' : 'mew.', 2.5);
 }
 function advanceCat(n) {
   if (cat.state !== 'approach' || n >= CAT_STEPS.length) return;
@@ -541,6 +544,7 @@ function advanceCat(n) {
   const p = CAT_STEPS[n];
   cat.from = cat.g.position.clone(); cat.to = new THREE.Vector3(p[0], p[1], p[2]); cat.moveT = 0;
   cat.waveT = 2.4; setTimeout(mew, 500);
+  if (SEASON === 'rain' && n === 3) say('THE CAT', 'One dash through the rain.', 3);
 }
 function spawnHeart() {
   const h = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), M.shu);
@@ -1888,6 +1892,7 @@ tick();
 window.__p3state = () => ({ pos: player.pos.toArray(), vel: player.vel.toArray(), ground: player.ground, yaw: player.yaw });
 window.__teleport = (x, y, z) => { player.pos.set(x, y, z); player.vel.set(0, 0, 0); };
 window.__catstep = n => advanceCat(n);
+window.__awaken = () => awakenCat();
 window.__setcam = (x, y, z, yaw, pitch) => { player.pos.set(x, y, z); player.yaw = yaw; player.pitch = pitch || 0; player.vel.set(0, 0, 0); };
 window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
