@@ -396,6 +396,8 @@ if (SEASON === 'snow') {
 const kairoRidges = [];
 let kairoSnow = 0; // v72
 let kice = 0; // v73
+const icicles = []; // v75
+const glints = []; let glintCount = 0; // v75
 function kairo(side) {
   const g = new THREE.Group();
   const roofMat = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.9 });
@@ -451,7 +453,7 @@ if (SEASON === 'snow') {
         const ic = new THREE.Mesh(new THREE.ConeGeometry(0.02 + irnd() * 0.02, len, 6), iceMat);
         ic.rotation.x = Math.PI;
         ic.position.set(ex + (irnd() - 0.5) * 0.06, 2.66 - len / 2, z + (irnd() - 0.5) * 0.7);
-        world.add(ic); kice++;
+        ic.userData.len = len; icicles.push(ic); world.add(ic); kice++;
       }
     }
   }
@@ -1803,9 +1805,30 @@ function updateFurin(T, dt) {
   }
   // v74: when the thaw wind peaks in snow, a rare icicle lets one high tick fall
   if (SEASON === 'snow' && furinBreeze > 0.9 && T - lastIceDrip > 9 && Math.random() < dt * 0.8) {
-    lastIceDrip = T; iceDrips++;
-    const base = 3400 + Math.random() * 800;
-    tone(base, base * 0.97, 'sine', 0.9, 0.03);
+    lastIceDrip = T; fireIceDrip();
+  }
+  // v75: glints fade and die
+  for (let i = glints.length - 1; i >= 0; i--) {
+    const gl = glints[i]; gl.userData.t += dt;
+    gl.material.opacity = Math.max(0, 1 - gl.userData.t / 0.8);
+    gl.scale.setScalar(1 + gl.userData.t * 1.5);
+    if (gl.userData.t > 0.8) { world.remove(gl); gl.material.dispose(); gl.geometry.dispose(); glints.splice(i, 1); }
+  }
+}
+function fireIceDrip(nearCam) {
+  iceDrips++;
+  const base = 3400 + Math.random() * 800;
+  tone(base, base * 0.97, 'sine', 0.9, 0.03);
+  if (icicles.length) {
+    let ic;
+    if (nearCam) {
+      let best = 1e9; ic = icicles[0];
+      for (const c of icicles) { const d = c.position.distanceToSquared(player.pos); if (d < best) { best = d; ic = c; } }
+    } else ic = icicles[(Math.random() * icicles.length) | 0];
+    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xdfefff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }));
+    gl.position.copy(ic.position); gl.position.y -= ic.userData.len / 2;
+    gl.userData.t = 0; world.add(gl); glints.push(gl); glintCount++;
   }
 }
 
@@ -2100,4 +2123,5 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, ice: iceDrips });
+window.__drip = (mode) => { fireIceDrip(mode === 'near'); return glintCount; };
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, ice: iceDrips, glint: glintCount });
