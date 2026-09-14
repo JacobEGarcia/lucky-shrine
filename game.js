@@ -979,11 +979,29 @@ function emaTexture(text, weather) {
 const EMA2_POS = [-4.1, 0, -23.2];
 const EMA3_POS = [-6.3, 0, -24.3];
 let ema2Built = false, ema2Spoke = false, ema3Built = false, ema3Spoke = false;
+function emaRackSnow(p) { // v70/v71: white sleeve + snow-laden cord bowing under the rail
+  if (SEASON !== 'snow') return;
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 1.62, 7), TORII_SNOW);
+  sleeve.rotation.z = Math.PI / 2; sleeve.position.set(p[0], 1.885, p[2]);
+  world.add(sleeve); emaRopeSnow++;
+  const SEG = 9;
+  for (let i = 0; i < SEG; i++) {
+    const t0 = i / SEG, t1 = (i + 1) / SEG;
+    const x0 = p[0] - 0.78 + 1.56 * t0, x1 = p[0] - 0.78 + 1.56 * t1;
+    const y0 = 1.84 - 0.075 * (1 - Math.pow(2 * t0 - 1, 2));
+    const y1 = 1.84 - 0.075 * (1 - Math.pow(2 * t1 - 1, 2));
+    const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, Math.hypot(x1 - x0, y1 - y0), 7), TORII_SNOW);
+    seg.position.set((x0 + x1) / 2, (y0 + y1) / 2, p[2] + 0.055);
+    seg.rotation.z = Math.PI / 2 + Math.atan2(y1 - y0, x1 - x0);
+    world.add(seg); emaRopeSnow++;
+  }
+}
 function buildEmaRack3() {
   if (ema3Built) return; ema3Built = true;
   addCyl(EMA3_POS[0] - 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, emaWood);
   addCyl(EMA3_POS[0] + 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, emaWood);
   const bar = addCyl(EMA3_POS[0], 1.85, EMA3_POS[2], 0.04, 0.04, 1.7, emaWood); bar.rotation.z = Math.PI / 2;
+  emaRackSnow(EMA3_POS);
   colliders.push({ min: new THREE.Vector3(EMA3_POS[0] - 0.9, 0, EMA3_POS[2] - 0.15), max: new THREE.Vector3(EMA3_POS[0] + 0.9, 2, EMA3_POS[2] + 0.15) });
 }
 function buildEmaRack2() {
@@ -991,6 +1009,7 @@ function buildEmaRack2() {
   addCyl(EMA2_POS[0] - 0.8, 1.0, EMA2_POS[2], 0.05, 0.06, 2.0, emaWood);
   addCyl(EMA2_POS[0] + 0.8, 1.0, EMA2_POS[2], 0.05, 0.06, 2.0, emaWood);
   const bar = addCyl(EMA2_POS[0], 1.85, EMA2_POS[2], 0.04, 0.04, 1.7, emaWood); bar.rotation.z = Math.PI / 2;
+  emaRackSnow(EMA2_POS);
   colliders.push({ min: new THREE.Vector3(EMA2_POS[0] - 0.9, 0, EMA2_POS[2] - 0.15), max: new THREE.Vector3(EMA2_POS[0] + 0.9, 2, EMA2_POS[2] + 0.15) });
 }
 let snowCaps = 0; // v63
