@@ -951,7 +951,7 @@ function renderEmaRack(list, base, key) {
       (() => { const t = emaTexture(w, weather); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.22 }); })());
     m.position.set(base[0] - 0.72 + (i % 6) * 0.29, 1.52 - Math.floor(i / 6) * 0.5, base[2] + 0.04);
     m.rotation.z = (Math.sin(i * 7.3 + key) * 0.05); m.rotation.y = (Math.sin(i * 3.1 + key) * 0.12);
-    m.userData.baseZ = m.rotation.z; m.userData.baseY = m.rotation.y; m.userData.phase = i * 1.37 + key;
+    m.userData.baseZ = m.rotation.z; m.userData.baseY = m.rotation.y; m.userData.phase = i * 1.37 + key; m.userData.emaWeather = weather;
     world.add(m); emaPlaques.push(m);
   });
 }
@@ -992,6 +992,7 @@ emaInput.addEventListener('keydown', e => {
   } else if (e.key === 'Escape') emaOpenSet(false);
 });
 window.__ema = () => emaWishes.slice();
+window.__emaFree = () => emaPlaques.map(m => ({ w: +(m.userData.emaWeather || 0).toFixed(2), free: +(1 - (m.userData.emaWeather || 0.5) * 0.6).toFixed(2), dz: +(m.rotation.z - m.userData.baseZ).toFixed(3) }));
 window.__emaOpen = emaOpenSet;
 
 // ================= SHOOTING STARS =================
@@ -1544,15 +1545,26 @@ function updateFurin(T, dt) {
 }
 
 let lastEmaClack = 0, emaClacks = 0, kitsuneGlow = 0.12, lastRustle = 0, rustles = 0;
+let emaSwayMax = 0, emaSwayFresh = 0, emaSwayOld = 0;
 function updateEmaBreeze(T, dt) {
   if (!emaPlaques.length) return;
   const sw = furinBreeze * furinBreeze;
+  // v52: rain gusts swing the plaques - soaked old wood hangs heavy, fresh plaques dance free
+  const rainy = SEASON === 'rain';
+  // sway counters peak-hold for QA: over a long gust window every plaque reaches its amplitude ceiling
   for (const m of emaPlaques) {
-    m.rotation.z = m.userData.baseZ + Math.sin(T * 3.1 + m.userData.phase) * 0.035 * sw;
-    m.rotation.y = m.userData.baseY + Math.sin(T * 2.3 + m.userData.phase * 1.7) * 0.06 * sw;
+    const free = 1 - (m.userData.emaWeather || 0.5) * 0.6;
+    const gust = rainy ? Math.max(0, Math.sin(T * 0.9 + m.userData.phase * 0.6)) * Math.max(0, Math.sin(T * 0.23 + 1.1)) * furinBreeze : 0;
+    const dz = Math.sin(T * 3.1 + m.userData.phase) * 0.035 * sw + Math.sin(T * 4.7 + m.userData.phase * 2.1) * 0.16 * gust * free;
+    m.rotation.z = m.userData.baseZ + dz;
+    m.rotation.y = m.userData.baseY + Math.sin(T * 2.3 + m.userData.phase * 1.7) * 0.06 * sw + Math.sin(T * 3.9 + m.userData.phase) * 0.1 * gust * free;
+    m.rotation.x = Math.sin(T * 5.3 + m.userData.phase * 1.3) * 0.07 * gust * free;
+    const ad = Math.abs(dz);
+    if (ad > emaSwayMax) emaSwayMax = ad;
+    if (m.userData.emaWeather <= 0.35 && ad > emaSwayFresh) emaSwayFresh = ad;
+    if (m.userData.emaWeather >= 0.9 && ad > emaSwayOld) emaSwayOld = ad;
   }
   // wooden clacks when the wind picks up; rain-soaked wood clacks lower and more often
-  const rainy = SEASON === 'rain';
   if (furinBreeze > (rainy ? 0.72 : 0.8) && T - lastEmaClack > (rainy ? 0.65 : 1.1) && Math.random() < dt * (rainy ? 2.4 : 1.6)) {
     lastEmaClack = T; emaClacks++;
     const f = rainy ? 130 + Math.random() * 60 : 170 + Math.random() * 90;
@@ -1718,7 +1730,6 @@ function tick() {
   updateMoths(T);
   // hanging things answer the breeze
   const sw = furinBreeze * furinBreeze;
-  for (let i = 0; i < emaPlaques.length; i++) { const p = emaPlaques[i]; p.rotation.y = Math.sin(i * 3.1) * 0.12 + Math.sin(T * 1.5 + i * 1.3) * 0.1 * sw; }
   const paperLoad = Math.min(tiedStrips.length, 10);
   for (let i = 0; i < tiedStrips.length; i++) {
     const st = tiedStrips[i];
@@ -1815,4 +1826,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length });
