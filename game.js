@@ -141,6 +141,7 @@ torii(-10, 0.85);
 let paws = 0;
 let snowHump = 0; // v83
 let humpKoban = 0; // v84
+let visitor = 0; // v85
 if (SEASON === 'snow') {
   const pawGeo = new THREE.CircleGeometry(0.042, 8);
   let pseed = 9917;
@@ -207,6 +208,52 @@ if (SEASON === 'snow') {
     hg.position.set(4.3, 0, -29.0);
     hg.rotation.y = -0.5;
     world.add(hg);
+  }
+  // v85: the first visitor - faint boot prints arrive from the south-east open
+  // ground, circle the hump once, shuffle to a stop beside the koban, and walk
+  // on behind the honden along its east side (the platform sits at x<=3.6)
+  {
+    const bootGeo = new THREE.CircleGeometry(0.05, 8);
+    let vseed = 7319;
+    const vrnd = () => (vseed = (vseed * 16807) % 2147483647) / 2147483647;
+    const vprint = (x, z, dir, op) => {
+      const mat = new THREE.MeshStandardMaterial({ color: 0xd6e0e8, roughness: 0.5, transparent: true, opacity: op, emissive: 0x8fa5b5, emissiveIntensity: 0.25 });
+      const fp = new THREE.Mesh(bootGeo, mat);
+      fp.rotation.x = -Math.PI / 2;
+      fp.rotation.z = -dir;
+      fp.scale.set(0.62, 1.45, 1);
+      fp.position.set(x, 0.02, z);
+      world.add(fp); visitor++;
+    };
+    const vlat = i => (i % 2 === 0 ? 1 : -1) * 0.09;
+    // approach
+    let vx = 5.8, vz = -26.4;
+    let vdir = Math.atan2(5.05 - vx, -28.6 - vz);
+    for (let i = 0; i < 5; i++) {
+      vprint(vx + vlat(i) * Math.cos(vdir), vz - vlat(i) * Math.sin(vdir), vdir, 0.15 + vrnd() * 0.05);
+      vx += Math.sin(vdir) * 0.45; vz += Math.cos(vdir) * 0.45;
+    }
+    // one full circle around the hump
+    const cx = 4.45, cz = -29.0, cr = 0.78, ring = 10, th0 = 0.9;
+    for (let i = 0; i <= ring; i++) {
+      const th = th0 + (i / ring) * Math.PI * 2;
+      const th2 = th0 + ((i + 1) / ring) * Math.PI * 2;
+      const rx = cx + Math.sin(th) * cr, rz = cz + Math.cos(th) * cr;
+      const rd = Math.atan2(cx + Math.sin(th2) * cr - rx, cz + Math.cos(th2) * cr - rz);
+      vprint(rx + vlat(i) * Math.cos(rd) * 0.8, rz - vlat(i) * Math.sin(rd) * 0.8, rd, 0.17 + vrnd() * 0.05);
+    }
+    // the shuffle where they stopped and looked, beside the koban
+    for (const [dth, dop] of [[-0.09, 0.26], [0.03, 0.28], [0.13, 0.26]]) {
+      const th = 0.69 + dth;
+      vprint(cx + Math.sin(th) * cr, cz + Math.cos(th) * cr, th + Math.PI / 2 + dth * 6, dop);
+    }
+    // and walked on behind the honden
+    vx = cx + Math.sin(th0 - 0.35) * cr; vz = cz + Math.cos(th0 - 0.35) * cr;
+    vdir = Math.atan2(0.45, -0.6);
+    for (let i = 0; i < 6; i++) {
+      vprint(vx + vlat(i) * Math.cos(vdir), vz - vlat(i) * Math.sin(vdir), vdir, 0.16 - i * 0.014);
+      vx += Math.sin(vdir) * 0.5; vz += Math.cos(vdir) * 0.5;
+    }
   }
 }
 // rain season wets the vermilion lacquer: deeper, darker, glossy - torii gates and the hall share the paint
@@ -2317,4 +2364,4 @@ function fireBreath() {
 window.__drip = (mode) => { fireIceDrip(mode === 'near'); return glintCount; };
 window.__breath = () => { fireBreath(); return breathCount; };
 window.__rillFill = () => { rillLen = 32; return rillLen; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), paws, hump: snowHump, humpKoban });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), paws, hump: snowHump, humpKoban, visitor });
