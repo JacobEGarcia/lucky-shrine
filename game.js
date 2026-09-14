@@ -289,6 +289,8 @@ function glowTexture(streak) {
 const poolTex = glowTexture(false), streakTex = glowTexture(true);
 // v53: pools cool as the cat brings the morning - warm gold at night, dusty peach-rose at dawn
 const POOL_WARM = new THREE.Color(0xffffff), POOL_DAWN = new THREE.Color(0xd8c2d4);
+let lanternCaps = 0; // v64
+const LANTERN_SNOW = new THREE.MeshStandardMaterial({ color: 0xe6ecf1, roughness: 0.92, metalness: 0.02 });
 const lanterns = [];
 function stoneLantern(x, z) {
   const g = new THREE.Group();
@@ -298,6 +300,18 @@ function stoneLantern(x, z) {
   const paper = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.3, 0.52), M.paper.clone()); paper.position.y = 1.27; g.add(paper);
   const roof = new THREE.Mesh(new THREE.ConeGeometry(0.48, 0.34, 4), M.stoneD); roof.position.y = 1.66; roof.rotation.y = Math.PI / 4; g.add(roof);
   const jewel = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), M.stone); jewel.position.y = 1.9; g.add(jewel);
+  // v64: snow season caps the roof - a drifted cone with a slight lip, the jewel pokes through
+  if (SEASON === 'snow') {
+    // a pyramid cap reads as a slab from below; snow here is a dollop on the peak + a line on the eave
+    const dollop = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), LANTERN_SNOW);
+    dollop.scale.set(1, 0.55, 1); dollop.position.y = 1.84;
+    dollop.castShadow = true; dollop.receiveShadow = true;
+    g.add(dollop);
+    const eave = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.032, 6, 4), LANTERN_SNOW);
+    eave.rotation.x = Math.PI / 2; eave.rotation.z = Math.PI / 4; eave.position.y = 1.52;
+    eave.castShadow = true; eave.receiveShadow = true;
+    g.add(eave); lanternCaps++;
+  }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   g.position.set(x, 0, z); world.add(g);
   const light = new THREE.PointLight(0xffc27a, 0, 7); light.position.set(x, 1.35, z); scene.add(light);
@@ -1955,4 +1969,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps });
