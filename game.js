@@ -1554,6 +1554,8 @@ function updateFurin(T, dt) {
 
 let lastEmaClack = 0, emaClacks = 0, kitsuneGlow = 0.12, lastRustle = 0, rustles = 0;
 let emaSwayMax = 0, emaSwayFresh = 0, emaSwayOld = 0;
+let stripSwayMax = 0;
+let stripGateDbg = 0;
 function updateEmaBreeze(T, dt) {
   if (!emaPlaques.length) return;
   const sw = furinBreeze * furinBreeze;
@@ -1739,10 +1741,16 @@ function tick() {
   // hanging things answer the breeze
   const sw = furinBreeze * furinBreeze;
   const paperLoad = Math.min(tiedStrips.length, 10);
+  // v54: rain gusts snap the tied strips - paper flutters faster than the wooden plaques swing
+  const stripGustGate = SEASON === 'rain' ? Math.max(0, Math.sin(T * 0.23 + 1.1)) * furinBreeze : 0;
+  stripGateDbg = stripGustGate;
   for (let i = 0; i < tiedStrips.length; i++) {
     const st = tiedStrips[i];
-    st.rotation.x = Math.sin(T * 1.8 + i * 0.9) * 0.16 * sw * (1 + paperLoad * 0.1);
-    if (tiedStrips.length >= 8) st.rotation.z = st.userData.baseZ + Math.sin(T * 7 + i * 1.7) * 0.05 * sw;
+    const sg = stripGustGate * Math.max(0, Math.sin(T * 0.9 + i * 0.8));
+    st.rotation.x = Math.sin(T * 1.8 + i * 0.9) * 0.16 * sw * (1 + paperLoad * 0.1) + Math.sin(T * 6.5 + i * 1.1) * 1.0 * sg * (1 + paperLoad * 0.1);
+    st.rotation.z = st.userData.baseZ + (tiedStrips.length >= 8 ? Math.sin(T * 7 + i * 1.7) * 0.05 * sw : 0) + Math.sin(T * 5.1 + i * 0.7) * 0.5 * sg;
+    const sd = Math.abs(st.rotation.x) * 0.6 + Math.abs(st.rotation.z - st.userData.baseZ) * 0.4;
+    if (sd > stripSwayMax) stripSwayMax = sd;
   }
   // a heavily laden rack rustles when the wind peaks
   if (tiedStrips.length >= 8 && furinBreeze > 0.82 && T - lastRustle > 2.5 && Math.random() < dt * 3) {
@@ -1834,4 +1842,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2) });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3) });
