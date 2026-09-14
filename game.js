@@ -395,6 +395,7 @@ if (SEASON === 'snow') {
 // Covered corridors frame the approach; their gold ridges catch first light at dawn.
 const kairoRidges = [];
 let kairoSnow = 0; // v72
+let kice = 0; // v73
 function kairo(side) {
   const g = new THREE.Group();
   const roofMat = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.9 });
@@ -437,6 +438,20 @@ if (SEASON === 'snow') {
         seg.position.set(ex, (y0 + y1) / 2, (z0 + z1) / 2);
         seg.rotation.x = Math.PI / 2 - Math.atan2(y1 - y0, z1 - z0);
         world.add(seg); kairoSnow++;
+      }
+    }
+    // v73: icicles under the eave, hanging at the posts between the sags
+    const iceMat = new THREE.MeshStandardMaterial({ color: 0xd9e6ee, roughness: 0.18, metalness: 0.05, transparent: true, opacity: 0.9, emissive: 0x6a7d8c, emissiveIntensity: 0.5 });
+    let iseed = (side + 2) * 977;
+    const irnd = () => (iseed = (iseed * 16807) % 2147483647) / 2147483647;
+    for (let z = 10; z >= -30; z -= 5) {
+      const n = 1 + Math.floor(irnd() * 2);
+      for (let i = 0; i < n; i++) {
+        const len = 0.16 + irnd() * 0.28;
+        const ic = new THREE.Mesh(new THREE.ConeGeometry(0.02 + irnd() * 0.02, len, 6), iceMat);
+        ic.rotation.x = Math.PI;
+        ic.position.set(ex + (irnd() - 0.5) * 0.06, 2.66 - len / 2, z + (irnd() - 0.5) * 0.7);
+        world.add(ic); kice++;
       }
     }
   }
@@ -2079,4 +2094,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice });
