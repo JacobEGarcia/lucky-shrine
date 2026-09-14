@@ -1047,6 +1047,7 @@ window.__star = () => { starWait = 0; };
 // ================= CHOZUYA (water basin) =================
 const BASIN_POS = [2.3, 0, 8.5];
 let basinRipples = [];
+const pourMats = []; // v55: gutter spout streams, shimmered in updateBasin
 {
   const stone = new THREE.MeshStandardMaterial({ color: 0x77726a, roughness: 0.9 });
   const water = new THREE.MeshStandardMaterial({ color: 0x2e3a42, roughness: 0.05, metalness: 0.4 });
@@ -1073,11 +1074,14 @@ function washBasin() {
 function updateBasin(dt) {
   // rain season: drops dimple the kairo basins' water, rings blooming and fading
   if (SEASON === 'rain') {
+    for (let i = 0; i < pourMats.length; i++) pourMats[i].opacity = (i % 2 ? 0.2 : 0.4) + Math.sin(performance.now() * 0.013 + i * 2.1) * 0.08;
     kairoDimpleT -= dt;
     if (kairoDimpleT <= 0) {
       kairoDimpleT = 0.1 + Math.random() * 0.12;
       const side = Math.random() < 0.5 ? -1 : 1;
-      const a = Math.random() * Math.PI * 2, rr = Math.random() * 0.2;
+      // most rings bloom where the spout lands; the rest are rain scatter
+      const impact = Math.random() < 0.65;
+      const a = Math.random() * Math.PI * 2, rr = impact ? Math.random() * 0.06 : 0.08 + Math.random() * 0.14;
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.018, 0.032, 12),
         new THREE.MeshBasicMaterial({ color: 0xaec6d8, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
       ring.rotation.x = -Math.PI / 2;
@@ -1144,6 +1148,17 @@ if (SEASON === 'rain') {
     basin.position.set(side * 10.62, 0.08, -30); basin.receiveShadow = true; world.add(basin);
     const bw = new THREE.Mesh(new THREE.CircleGeometry(0.3, 12), pudMat);
     bw.rotation.x = -Math.PI / 2; bw.position.set(side * 10.62, 0.17, -30); world.add(bw);
+    // v55: the gutter mouths a bamboo spout over the chain; the pour ties the dimples to a source
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.3, 8), new THREE.MeshStandardMaterial({ color: 0xa8a86a, roughness: 0.8 }));
+    spout.rotation.x = Math.PI / 2 - 0.35; spout.position.set(side * 10.62, 2.6, -30.08); spout.castShadow = true; world.add(spout);
+    const pourMat = new THREE.MeshBasicMaterial({ color: 0xd4e6f2, transparent: true, opacity: 0.42 });
+    const pour = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.028, 2.3, 8), pourMat);
+    pour.position.set(side * 10.62, 1.32, -30); world.add(pour);
+    pourMats.push(pourMat);
+    // pale churn where the pour lands
+    const churn = new THREE.Mesh(new THREE.CircleGeometry(0.07, 12), new THREE.MeshBasicMaterial({ color: 0xd4e6f2, transparent: true, opacity: 0.22 }));
+    churn.rotation.x = -Math.PI / 2; churn.position.set(side * 10.62, 0.176, -30); world.add(churn);
+    pourMats.push(churn.material);
   }
   const CN = 12;
   chainPos = new Float32Array(CN * 6); chainVel = new Float32Array(CN);
