@@ -397,6 +397,7 @@ const kairoRidges = [];
 let kairoSnow = 0; // v72
 let kice = 0; // v73
 let kfrost = 0; // v76
+let ferns = 0; // v77
 const icicles = []; // v75
 const glints = []; let glintCount = 0; // v75
 function kairo(side) {
@@ -511,6 +512,31 @@ function lightLantern(l) {
     for (const [sy, sz, sw] of [[0.34, -25.9, 4.4], [0.64, -26.55, 3.9], [0.94, -27.2, 3.4]]) {
       const c = new THREE.Mesh(new THREE.BoxGeometry(sw, 0.07, 0.65), sMat);
       c.position.set(0, sy, sz); world.add(c);
+    }
+    // v77: frost ferns feathering the tread front edges - seeded fronds, each a
+    // short stem tipping over the edge with alternating barbs
+    const fernMat = new THREE.MeshStandardMaterial({ color: 0xe6eef5, roughness: 0.4, transparent: true, opacity: 0.7, emissive: 0x93a8b8, emissiveIntensity: 0.4 });
+    let fseed = 4243;
+    const frnd = () => (fseed = (fseed * 16807) % 2147483647) / 2147483647;
+    for (const [topY, frontZ, halfW] of [[0.3, -25.575, 2.2], [0.6, -26.225, 1.95], [0.9, -26.875, 1.7]]) {
+      const n = Math.floor(halfW * 2 / 0.28);
+      for (let i = 0; i < n; i++) {
+        if (frnd() < 0.25) continue; // gaps - ferns grow in colonies, not a trim
+        const fx = -halfW + 0.15 + i * 0.28 + (frnd() - 0.5) * 0.12;
+        const fg = new THREE.Group();
+        const stem = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.16), fernMat);
+        stem.rotation.x = -1.15; stem.position.set(0, 0.05, 0.05); fg.add(stem);
+        for (let b = 0; b < 3; b++) {
+          for (const sd of [-1, 1]) {
+            const barb = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 0.07), fernMat);
+            barb.position.set(sd * 0.028, 0.03 + b * 0.028, 0.02 + b * 0.035);
+            barb.rotation.set(-1.0, 0, sd * 0.75); fg.add(barb);
+          }
+        }
+        fg.position.set(fx, topY, frontZ - 0.02);
+        fg.rotation.y = (frnd() - 0.5) * 0.5;
+        world.add(fg); ferns++;
+      }
     }
   }
   addBox(0, 2.4, -30.5, 5.6, 3.2, 3.6, M.woodR, { cast: true });  // hall body
@@ -2144,4 +2170,4 @@ window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
 window.__drip = (mode) => { fireIceDrip(mode === 'near'); return glintCount; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ice: iceDrips, glint: glintCount });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount });
