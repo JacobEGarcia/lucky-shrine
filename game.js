@@ -126,6 +126,8 @@ function torii(z, scale = 1) {
 }
 torii(6, 1.0);
 torii(-10, 0.85);
+// rain season wets the vermilion lacquer: deeper, darker, glossy - torii gates and the hall share the paint
+if (SEASON === 'rain') { M.woodR.color.setHex(0x6e241c); M.woodR.roughness = 0.35; }
 
 // ---------- player ----------
 const player = {
@@ -263,6 +265,28 @@ function say(who, line, secs) {
 }
 const hintEl = document.getElementById('hint');
 
+// v51: a lit lantern throws a warm pool onto the path stone; rain wets the stone into a
+// mirror - the pool widens and a reflection smear stretches from the lantern toward the path
+const poolWet = SEASON === 'rain' ? 1 : 0;
+function glowTexture(streak) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+  const x = c.getContext('2d');
+  if (streak) {
+    // bright at the lantern-side edge, falling away; sides feathered so it reads as reflection
+    const g = x.createLinearGradient(0, 0, 128, 0);
+    g.addColorStop(0, 'rgba(255,216,152,0.85)'); g.addColorStop(0.45, 'rgba(255,192,122,0.3)'); g.addColorStop(1, 'rgba(255,192,122,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+    const side = x.createLinearGradient(0, 0, 0, 128);
+    side.addColorStop(0, 'rgba(0,0,0,1)'); side.addColorStop(0.3, 'rgba(0,0,0,0)'); side.addColorStop(0.7, 'rgba(0,0,0,0)'); side.addColorStop(1, 'rgba(0,0,0,1)');
+    x.globalCompositeOperation = 'destination-out'; x.fillStyle = side; x.fillRect(0, 0, 128, 128);
+  } else {
+    const g = x.createRadialGradient(64, 64, 6, 64, 64, 62);
+    g.addColorStop(0, 'rgba(255,216,152,0.9)'); g.addColorStop(0.45, 'rgba(255,198,128,0.32)'); g.addColorStop(1, 'rgba(255,198,128,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  }
+  return new THREE.CanvasTexture(c);
+}
+const poolTex = glowTexture(false), streakTex = glowTexture(true);
 const lanterns = [];
 function stoneLantern(x, z) {
   const g = new THREE.Group();
@@ -276,7 +300,20 @@ function stoneLantern(x, z) {
   g.position.set(x, 0, z); world.add(g);
   const light = new THREE.PointLight(0xffc27a, 0, 7); light.position.set(x, 1.35, z); scene.add(light);
   colliders.push({ min: new THREE.Vector3(x - 0.35, 0, z - 0.35), max: new THREE.Vector3(x + 0.35, 1.6, z + 0.35) });
-  lanterns.push({ x, z, lit: false, paper, light, flick: Math.random() * 10 });
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  pool.rotation.x = -Math.PI / 2; pool.position.set(x, 0.02, z);
+  pool.scale.setScalar(1.5 + poolWet * 0.85);
+  world.add(pool);
+  let streak = null;
+  if (poolWet) {
+    streak = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.6), new THREE.MeshBasicMaterial({ map: streakTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    streak.rotation.x = -Math.PI / 2;
+    const dir = x > 0 ? -1 : 1; // smear runs from the lantern toward the path center
+    streak.scale.x = dir;
+    streak.position.set(x + dir * 1.2, 0.025, z);
+    world.add(streak);
+  }
+  lanterns.push({ x, z, lit: false, paper, light, flick: Math.random() * 10, pool, streak });
 }
 stoneLantern(-2.2, 8); stoneLantern(2.2, 4);
 stoneLantern(-2.2, -2); stoneLantern(2.2, -6);
@@ -286,6 +323,36 @@ stoneLantern(-2.9, -26.2); stoneLantern(2.9, -26.2);
 const shrineWash = new THREE.PointLight(0xffb46a, 30, 16); shrineWash.position.set(0, 3.2, -25.6); scene.add(shrineWash);
 const shrineGlow = new THREE.PointLight(0xffd9a0, 12, 8); shrineGlow.position.set(0, 1.6, -27.2); scene.add(shrineGlow);
 for (const gl of lanterns.slice(-2)) { gl.lit = true; gl.paper.material.emissiveIntensity = 1.6; gl.light.intensity = 30; gl.guardian = true; }
+
+// firefly season: moths dance around lit lanterns
+const MOTH_PER = 4, MOTH_N = lanterns.length * MOTH_PER;
+const mothPos = new Float32Array(MOTH_N * 3).fill(-30);
+const mothLan = [], mothPh = [], mothR = [], mothSp = [];
+for (let i = 0; i < MOTH_N; i++) {
+  mothLan.push(Math.floor(i / MOTH_PER));
+  mothPh.push(Math.random() * 6.28);
+  mothR.push(0.22 + Math.random() * 0.3);
+  mothSp.push(1.6 + Math.random() * 1.8);
+}
+const mothGeo = new THREE.BufferGeometry();
+mothGeo.setAttribute('position', new THREE.BufferAttribute(mothPos, 3));
+const moths = new THREE.Points(mothGeo, new THREE.PointsMaterial({
+  color: 0xffefc2, size: 0.055, transparent: true, opacity: 0.95,
+  blending: THREE.AdditiveBlending, depthWrite: false }));
+moths.visible = SEASON === 'firefly';
+scene.add(moths);
+function updateMoths(T) {
+  if (!moths.visible) return;
+  for (let i = 0; i < MOTH_N; i++) {
+    const l = lanterns[mothLan[i]];
+    if (!l.lit) { mothPos[i*3+1] = -30; continue; }
+    const a = T * mothSp[i] + mothPh[i];
+    mothPos[i*3]   = l.x + Math.cos(a) * mothR[i] + Math.sin(T * 5.1 + mothPh[i]) * 0.05;
+    mothPos[i*3+1] = 1.3 + Math.sin(T * 2.7 + mothPh[i] * 2.1) * 0.2;
+    mothPos[i*3+2] = l.z + Math.sin(a) * mothR[i] + Math.cos(T * 4.3 + mothPh[i]) * 0.05;
+  }
+  mothGeo.attributes.position.needsUpdate = true;
+}
 
 // snow season: white caps settle on the gates and lantern roofs
 if (SEASON === 'snow') {
@@ -516,6 +583,7 @@ function tossKoban() {
 const kobanDrops = [];
 let kobanScattered = false;
 const kobanScatterMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.7, emissive: 0xffc9a0, emissiveIntensity: 0 });
+const kobanTrailMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.7, emissive: 0xffb46a, emissiveIntensity: 0.28 });
 function kobanScatter() {
   if (kobanScattered) return; kobanScattered = true;
   const treads = [[0.3, -25.9, 2.0], [0.6, -26.55, 1.7], [0.9, -27.2, 1.5]];
@@ -526,6 +594,17 @@ function kobanScatter() {
     m.position.set((Math.random() * 2 - 1) * hw, ty + 1.4, tz + (Math.random() - 0.5) * 0.4);
     m.castShadow = true; world.add(m);
     kobanDrops.push({ m, y1: ty + 0.012, t: 0, delay: i * 0.12 });
+  }
+  // a trail of coins leads down the kairo path
+  for (let i = 0; i < 16; i++) {
+    const z = -24 + i * 2.0;
+    const x = Math.sin(z * 0.45) * 0.55;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 14), kobanTrailMat);
+    m.rotation.y = Math.random() * 6.28;
+    m.position.set(x, 1.4, z);
+    m.castShadow = true; world.add(m);
+    kobanDrops.push({ m, y1: 0.012, t: 0, delay: 1.4 + i * 0.22 });
+    setTimeout(() => tone(1046.5, 1046.5, 'sine', 0.22, 0.028), 1400 + i * 220);
   }
   [0, 2, 4, 7].forEach((n, i) => setTimeout(() => tone(523.25 * Math.pow(1.122, n), 523.25 * Math.pow(1.122, n), 'triangle', 0.5, 0.06), 250 + i * 130));
   setTimeout(() => say('THE SHRINE', 'A great blessing pays for the stones too.', 4), 1800);
@@ -578,6 +657,7 @@ function tieToRack() {
   tiedCount++;
   const s = addBox(OMI_POS[0] - 0.65 + ((tiedCount * 0.23) % 1.4), 1.5 - (tiedCount % 3) * 0.12, OMI_POS[2] + 0.03, 0.09, 0.46, 0.01, M.paper, { noCollide: true });
   s.rotation.z = (Math.random() - 0.5) * 0.3;
+  s.userData.baseZ = s.rotation.z;
   tiedStrips.push(s);
   say('THE RACK', tiedCount === 1 ? 'Tied and left behind. The wind reads it so you do not have to.' : 'Another one the wind can keep.', 4);
   tone(520, 520, 'sine', 0.6, 0.07);
@@ -669,6 +749,22 @@ async function renderShare() {
   g.fillText('Light the lanterns. Ring the bells. Beckon fortune.', 70, 560);
   g.fillStyle = '#c9a86a'; g.font = '16px ui-monospace,Menlo,monospace';
   g.fillText('jacobegarcia.github.io/lucky-shrine/', 70, 592);
+  // the bells answer back: sibling mention, bottom right
+  const bellsUrl = 'jacobegarcia.github.io/lucky-bells';
+  g.textAlign = 'right';
+  g.fillStyle = '#8a7f68'; g.font = '15px ui-monospace,Menlo,monospace';
+  g.fillText(bellsUrl, 1130, 592);
+  const bw = g.measureText(bellsUrl).width;
+  g.fillStyle = '#c9a227'; g.font = '17px "Hiragino Mincho ProN","Yu Mincho",serif';
+  g.fillText('the bells answer \u00B7 \u9234\u304C\u5FDC\u3048\u308B', 1130 - bw - 34, 592);
+  g.save(); g.translate(1130 - bw - 16, 586);
+  g.strokeStyle = '#c9a227'; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(0, 1, 6, Math.PI, 0); g.stroke();
+  g.beginPath(); g.moveTo(-7.5, 1); g.lineTo(7.5, 1); g.stroke();
+  g.beginPath(); g.moveTo(0, 1); g.lineTo(0, 6); g.stroke();
+  g.fillStyle = '#c9a227'; g.beginPath(); g.arc(0, 7.2, 1.3, 0, 7); g.fill();
+  g.restore();
+  g.textAlign = 'left';
   return cv;
 }
 shareBtn.addEventListener('click', async () => {
@@ -693,6 +789,27 @@ const FORTUNES = [
   'What you feed grows. Feed the good habit.',
   'Fortune favors the one who shows up daily.',
 ];
+// dawn hours (5-8am) draw from their own set - the early visit is its own fortune
+const DAWN_FORTUNES = [
+  'You came before the sun. Fortune noticed.',
+  'The first visitor of the day gets the freshest luck.',
+  'What you begin at dawn finishes itself.',
+  'The shrine keeps the early hour for the sincere.',
+  'Morning is a door that only opens from inside.',
+  'The cat was already awake. So were you. Good sign.',
+];
+function pickFortune(hourOverride) {
+  const hr = hourOverride == null ? new Date().getHours() : hourOverride;
+  const dawnVisit = hr >= 5 && hr < 8;
+  const set = dawnVisit ? DAWN_FORTUNES : FORTUNES;
+  return { fortune: set[Math.floor(Math.random() * set.length)], dawnVisit };
+}
+window.__fortune = pickFortune;
+function dripNearness() {
+  const d = Math.hypot(player.pos.x - OMI_POS[0], player.pos.z - OMI_POS[2]);
+  return Math.max(0, 1 - Math.max(0, d - 2) / 7);
+}
+window.__dripNear = dripNearness;
 let done = false;
 function hideWinCard() {
   winEl.style.opacity = '0';
@@ -717,9 +834,9 @@ function completeShrine() {
     localStorage.setItem('ls_streak', String(streak));
     localStorage.setItem('ls_last', today);
   } catch (e) {}
-  const fortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)];
+  const pf = pickFortune(); const fortune = pf.fortune;
   setTimeout(() => {
-    winH2.textContent = '福 FORTUNE RECEIVED';
+    winH2.textContent = pf.dawnVisit ? '福 DAWN FORTUNE RECEIVED' : '福 FORTUNE RECEIVED';
     winP.innerHTML = fortune + '<br><br><span class="meta" style="color:#c9a86a">' +
       streak + (streak === 1 ? ' DAY' : ' DAYS') + ' AT THE SHRINE' + (kobanGiven ? ' · ' + kobanGiven + ' KOBAN GIVEN (' + (+localStorage.getItem('ls_koban_life') || 0) + ' LIFETIME)' : '') + ' · RETURN TOMORROW<br><span style="opacity:.55;font-size:10px">CLICK TO LINGER AT THE SHRINE · DRAW AN OMIKUJI BY THE RACK</span></span>';
     winEl.style.display = 'flex';
@@ -750,6 +867,9 @@ const leaves = new THREE.Points(leafGeo, new THREE.PointsMaterial({
 world.add(leaves);
 
 // ================= EMA (WISH PLAQUES) =================
+// the racks get their own wood so rain can wet their sheen without touching sheltered timber
+const emaWood = M.wood.clone();
+if (SEASON === 'rain') { emaWood.color.setHex(0x332318); emaWood.roughness = 0.38; }
 const EMA_POS = [-4.1, 0, -25.0];
 let emaWishes = [];
 try { emaWishes = JSON.parse(localStorage.getItem('ls_ema') || '[]'); } catch (e) {}
@@ -758,14 +878,16 @@ const emaInput = document.getElementById('emainput');
 let emaOpen = false;
 const emaPlaques = [];
 {
-  addCyl(EMA_POS[0] - 0.8, 1.0, EMA_POS[2], 0.05, 0.06, 2.0, M.wood);
-  addCyl(EMA_POS[0] + 0.8, 1.0, EMA_POS[2], 0.05, 0.06, 2.0, M.wood);
-  const bar = addCyl(EMA_POS[0], 1.85, EMA_POS[2], 0.04, 0.04, 1.7, M.wood); bar.rotation.z = Math.PI / 2;
+  addCyl(EMA_POS[0] - 0.8, 1.0, EMA_POS[2], 0.05, 0.06, 2.0, emaWood);
+  addCyl(EMA_POS[0] + 0.8, 1.0, EMA_POS[2], 0.05, 0.06, 2.0, emaWood);
+  const bar = addCyl(EMA_POS[0], 1.85, EMA_POS[2], 0.04, 0.04, 1.7, emaWood); bar.rotation.z = Math.PI / 2;
   colliders.push({ min: new THREE.Vector3(EMA_POS[0] - 0.9, 0, EMA_POS[2] - 0.15), max: new THREE.Vector3(EMA_POS[0] + 0.9, 2, EMA_POS[2] + 0.15) });
 }
-function emaTexture(text) {
+function emaTexture(text, weather) {
   const c = document.createElement('canvas'); c.width = 256; c.height = 320;
   const x = c.getContext('2d');
+  weather = weather || 0; // 0 fresh .. 1 seasons-old; only bites in rain season
+  const wet = SEASON === 'rain' ? weather : 0;
   // ema silhouette: peaked roof over a rectangle, warm wood
   x.fillStyle = '#d8b988'; x.beginPath();
   x.moveTo(28, 300); x.lineTo(28, 90); x.lineTo(128, 20); x.lineTo(228, 90); x.lineTo(228, 300); x.closePath(); x.fill();
@@ -773,12 +895,36 @@ function emaTexture(text) {
   // hole + cord
   x.fillStyle = '#0d0b09'; x.beginPath(); x.arc(128, 52, 7, 0, 7); x.fill();
   x.strokeStyle = '#c73a24'; x.lineWidth = 4; x.beginPath(); x.moveTo(128, 59); x.lineTo(128, 78); x.stroke();
-  // wish text, ink, wrapped
-  x.fillStyle = '#2a2118'; x.textAlign = 'center'; x.font = '600 26px "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
+  // wish text, ink, wrapped - rain season fades and bleeds the old wishes
+  x.textAlign = 'center'; x.font = '600 26px "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
   const words = String(text).split(/\s+/), lines = []; let cur = '';
   for (const w of words) { if ((cur + ' ' + w).trim().length > 13) { if (cur) lines.push(cur); cur = w; } else cur = (cur + ' ' + w).trim(); }
   if (cur) lines.push(cur);
-  lines.slice(0, 5).forEach((l, i) => x.fillText(l, 128, 125 + i * 36));
+  const inkA = 1 - wet * 0.62; // old ink washes thin
+  lines.slice(0, 5).forEach((l, i) => {
+    const ly = 125 + i * 36;
+    if (wet > 0) { // the bleed: ink weeps a few pixels straight down
+      x.fillStyle = 'rgba(42,33,24,' + (inkA * 0.28 * wet).toFixed(3) + ')';
+      x.fillText(l, 128, ly + 3);
+    }
+    x.fillStyle = 'rgba(42,33,24,' + inkA.toFixed(3) + ')';
+    x.fillText(l, 128, ly);
+    if (wet > 0) { // drips run from under the strokes
+      let dseed = (i + 1) * 131 + String(text).length * 17;
+      const drnd = () => (dseed = (dseed * 16807) % 2147483647) / 2147483647;
+      const drips = 1 + Math.floor(drnd() * 3);
+      for (let d = 0; d < drips; d++) {
+        const dx = 52 + drnd() * 152, dlen = (10 + drnd() * 26) * wet;
+        x.strokeStyle = 'rgba(42,33,24,' + (0.32 * wet).toFixed(3) + ')'; x.lineWidth = 1.6;
+        x.beginPath(); x.moveTo(dx, ly + 4); x.lineTo(dx + (drnd() - 0.5) * 2, ly + 4 + dlen); x.stroke();
+      }
+    }
+  });
+  if (wet > 0.4) { // rain stain pooling at the bottom edge
+    const gr = x.createLinearGradient(0, 230, 0, 300);
+    gr.addColorStop(0, 'rgba(70,80,88,0)'); gr.addColorStop(1, 'rgba(70,80,88,' + (0.28 * wet).toFixed(3) + ')');
+    x.fillStyle = gr; x.fillRect(28, 230, 200, 70);
+  }
   const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
 }
 const EMA2_POS = [-4.1, 0, -23.2];
@@ -786,24 +932,26 @@ const EMA3_POS = [-6.3, 0, -24.3];
 let ema2Built = false, ema2Spoke = false, ema3Built = false, ema3Spoke = false;
 function buildEmaRack3() {
   if (ema3Built) return; ema3Built = true;
-  addCyl(EMA3_POS[0] - 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, M.wood);
-  addCyl(EMA3_POS[0] + 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, M.wood);
-  const bar = addCyl(EMA3_POS[0], 1.85, EMA3_POS[2], 0.04, 0.04, 1.7, M.wood); bar.rotation.z = Math.PI / 2;
+  addCyl(EMA3_POS[0] - 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, emaWood);
+  addCyl(EMA3_POS[0] + 0.8, 1.0, EMA3_POS[2], 0.05, 0.06, 2.0, emaWood);
+  const bar = addCyl(EMA3_POS[0], 1.85, EMA3_POS[2], 0.04, 0.04, 1.7, emaWood); bar.rotation.z = Math.PI / 2;
   colliders.push({ min: new THREE.Vector3(EMA3_POS[0] - 0.9, 0, EMA3_POS[2] - 0.15), max: new THREE.Vector3(EMA3_POS[0] + 0.9, 2, EMA3_POS[2] + 0.15) });
 }
 function buildEmaRack2() {
   if (ema2Built) return; ema2Built = true;
-  addCyl(EMA2_POS[0] - 0.8, 1.0, EMA2_POS[2], 0.05, 0.06, 2.0, M.wood);
-  addCyl(EMA2_POS[0] + 0.8, 1.0, EMA2_POS[2], 0.05, 0.06, 2.0, M.wood);
-  const bar = addCyl(EMA2_POS[0], 1.85, EMA2_POS[2], 0.04, 0.04, 1.7, M.wood); bar.rotation.z = Math.PI / 2;
+  addCyl(EMA2_POS[0] - 0.8, 1.0, EMA2_POS[2], 0.05, 0.06, 2.0, emaWood);
+  addCyl(EMA2_POS[0] + 0.8, 1.0, EMA2_POS[2], 0.05, 0.06, 2.0, emaWood);
+  const bar = addCyl(EMA2_POS[0], 1.85, EMA2_POS[2], 0.04, 0.04, 1.7, emaWood); bar.rotation.z = Math.PI / 2;
   colliders.push({ min: new THREE.Vector3(EMA2_POS[0] - 0.9, 0, EMA2_POS[2] - 0.15), max: new THREE.Vector3(EMA2_POS[0] + 0.9, 2, EMA2_POS[2] + 0.15) });
 }
 function renderEmaRack(list, base, key) {
   list.forEach((w, i) => {
+    const weather = list.length > 1 ? 0.25 + 0.75 * (1 - i / (list.length - 1)) : 0.5; // oldest plaques weathered most
     const m = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.02),
-      (() => { const t = emaTexture(w); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.22 }); })());
+      (() => { const t = emaTexture(w, weather); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.22 }); })());
     m.position.set(base[0] - 0.72 + (i % 6) * 0.29, 1.52 - Math.floor(i / 6) * 0.5, base[2] + 0.04);
     m.rotation.z = (Math.sin(i * 7.3 + key) * 0.05); m.rotation.y = (Math.sin(i * 3.1 + key) * 0.12);
+    m.userData.baseZ = m.rotation.z; m.userData.baseY = m.rotation.y; m.userData.phase = i * 1.37 + key;
     world.add(m); emaPlaques.push(m);
   });
 }
@@ -920,6 +1068,20 @@ function washBasin() {
   say('THE BASIN', ['Wash the day off. The night listens better.', 'Cold water, warm road.', 'The ladle remembers every hand.'][Math.floor(Math.random() * 3)], 4);
 }
 function updateBasin(dt) {
+  // rain season: drops dimple the kairo basins' water, rings blooming and fading
+  if (SEASON === 'rain') {
+    kairoDimpleT -= dt;
+    if (kairoDimpleT <= 0) {
+      kairoDimpleT = 0.1 + Math.random() * 0.12;
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const a = Math.random() * Math.PI * 2, rr = Math.random() * 0.2;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.018, 0.032, 12),
+        new THREE.MeshBasicMaterial({ color: 0xaec6d8, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(side * 10.62 + Math.cos(a) * rr, 0.175, -30 + Math.sin(a) * rr);
+      world.add(ring); basinRipples.push({ m: ring, t: 0.9 }); kairoDimples++;
+    }
+  }
   for (let i = basinRipples.length - 1; i >= 0; i--) {
     const r = basinRipples[i];
     r.t -= dt * 0.8; r.m.scale.multiplyScalar(1 + dt * 1.6); r.m.material.opacity = r.t * 0.7;
@@ -929,6 +1091,8 @@ function updateBasin(dt) {
 
 // ================= RAIN (season=rain) =================
 let rainGeo = null, rainPos = null, rainVel = null;
+let flowGeo = null, flowPos = null, flowVel = null, chainGeo = null, chainPos = null, chainVel = null;
+let rackDripT = 0.8, kairoDimpleT = 0, kairoDimples = 0;
 let dripGeo = null, dripPos = null, dripVel = null, dripWait = null, dripX = null, dripZ = null, dripTop = null;
 if (SEASON === 'rain') {
   const RN = 340;
@@ -948,7 +1112,54 @@ if (SEASON === 'rain') {
     const p = new THREE.Mesh(new THREE.CircleGeometry(pr, 16), pudMat);
     p.rotation.x = -Math.PI / 2; p.position.set(px, 0.115, pz); world.add(p);
   });
-  // eave drips off the kairo walkways: gather, fall straight, hold
+  // rain gutters along the inner kairo eaves; water runs toward the shrine end
+  const gutMat = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.6, metalness: 0.3 });
+  for (const side of [-1, 1]) {
+    const gut = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 42), gutMat);
+    gut.position.set(side * 10.62, 2.68, -10); gut.castShadow = true; world.add(gut);
+  }
+  const FN = 40;
+  flowPos = new Float32Array(FN * 6); flowVel = new Float32Array(FN);
+  for (let i = 0; i < FN; i++) {
+    const side = i % 2 ? 1 : -1;
+    const z = 9.6 - Math.random() * 39;
+    flowPos[i * 6] = side * 10.52; flowPos[i * 6 + 1] = 2.62; flowPos[i * 6 + 2] = z;
+    flowPos[i * 6 + 3] = side * 10.52; flowPos[i * 6 + 4] = 2.62; flowPos[i * 6 + 5] = z + 0.55;
+    flowVel[i] = 2.2 + Math.random() * 1.2;
+  }
+  flowGeo = new THREE.BufferGeometry();
+  flowGeo.setAttribute('position', new THREE.BufferAttribute(flowPos, 3));
+  world.add(new THREE.LineSegments(flowGeo, new THREE.LineBasicMaterial({ color: 0xaec6d8, transparent: true, opacity: 0.55 })));
+  // rain chains at the downhill end, into stone basins
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 9; i++) {
+      const link = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.016, 6, 10), gutMat);
+      link.position.set(side * 10.62, 2.55 - i * 0.28, -30); link.rotation.y = (i % 2) * Math.PI / 2;
+      world.add(link);
+    }
+    const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 0.16, 12), M.stoneD);
+    basin.position.set(side * 10.62, 0.08, -30); basin.receiveShadow = true; world.add(basin);
+    const bw = new THREE.Mesh(new THREE.CircleGeometry(0.3, 12), pudMat);
+    bw.rotation.x = -Math.PI / 2; bw.position.set(side * 10.62, 0.17, -30); world.add(bw);
+  }
+  const CN = 12;
+  chainPos = new Float32Array(CN * 6); chainVel = new Float32Array(CN);
+  for (let i = 0; i < CN; i++) {
+    const side = i % 2 ? 1 : -1;
+    const y = 0.2 + Math.random() * 2.4;
+    chainPos[i * 6] = side * 10.62; chainPos[i * 6 + 1] = y; chainPos[i * 6 + 2] = -30;
+    chainPos[i * 6 + 3] = side * 10.62; chainPos[i * 6 + 4] = y + 0.12; chainPos[i * 6 + 5] = -30;
+    chainVel[i] = 2.6 + Math.random() * 1.2;
+  }
+  chainGeo = new THREE.BufferGeometry();
+  chainGeo.setAttribute('position', new THREE.BufferAttribute(chainPos, 3));
+  world.add(new THREE.LineSegments(chainGeo, new THREE.LineBasicMaterial({ color: 0xaec6d8, transparent: true, opacity: 0.5 })));
+}
+// drips: rain off the eaves and gates; slow meltwater in snow
+let dripMaxWait = 2.6, dripBaseWait = 0.4;
+if (SEASON === 'rain' || SEASON === 'snow') {
+  const SNOWMELT = SEASON === 'snow';
+  if (SNOWMELT) { dripMaxWait = 5.2; dripBaseWait = 1.2; }
   const DN = 62;
   dripPos = new Float32Array(DN * 6); dripVel = new Float32Array(DN); dripWait = new Float32Array(DN); dripX = new Float32Array(DN); dripZ = new Float32Array(DN); dripTop = new Float32Array(DN);
   for (let i = 0; i < DN; i++) {
@@ -960,8 +1171,8 @@ if (SEASON === 'rain') {
     } else {
       dripX[i] = (Math.random() - 0.5) * 4.0; dripZ[i] = -10 + (Math.random() - 0.5) * 0.45; dripTop[i] = 4.18;
     }
-    dripWait[i] = Math.random() * 2.4;
-    dripVel[i] = 5.2 + Math.random() * 1.6;
+    dripWait[i] = Math.random() * (SNOWMELT ? 5 : 2.4);
+    dripVel[i] = SNOWMELT ? 3.2 + Math.random() * 1.2 : 5.2 + Math.random() * 1.6;
     dripPos[i * 6] = dripX[i]; dripPos[i * 6 + 1] = -1; dripPos[i * 6 + 2] = dripZ[i];
     dripPos[i * 6 + 3] = dripX[i]; dripPos[i * 6 + 4] = -1; dripPos[i * 6 + 5] = dripZ[i];
   }
@@ -970,8 +1181,20 @@ if (SEASON === 'rain') {
   world.add(new THREE.LineSegments(dripGeo, new THREE.LineBasicMaterial({ color: 0xaec6d8, transparent: true, opacity: 0.5 })));
 }
 function updateRain(dt) {
-  if (!rainGeo) return;
-  for (let i = 0; i < rainVel.length; i++) {
+  if (!rainGeo && !dripGeo) return;
+  // omikuji rack drips: soft ticks off the paper strips, louder the closer you stand
+  if (SEASON === 'rain' && AC) {
+    rackDripT -= dt;
+    if (rackDripT <= 0) {
+      rackDripT = 0.25 + Math.random() * 0.85;
+      const near = dripNearness();
+      if (near > 0.02) {
+        const f = 1500 + Math.random() * 1200;
+        tone(f, f * 0.7, 'sine', 0.07, 0.045 * near);
+      }
+    }
+  }
+  if (rainGeo) for (let i = 0; i < rainVel.length; i++) {
     rainPos[i * 6 + 1] -= rainVel[i] * dt; rainPos[i * 6] -= rainVel[i] * dt * 0.16;
     if (rainPos[i * 6 + 1] < 0) {
       const x = (Math.random() - 0.5) * 40, z = 14 - Math.random() * 55;
@@ -979,23 +1202,43 @@ function updateRain(dt) {
     }
     rainPos[i * 6 + 3] = rainPos[i * 6] + 0.06; rainPos[i * 6 + 4] = rainPos[i * 6 + 1] + 0.38; rainPos[i * 6 + 5] = rainPos[i * 6 + 2];
   }
-  rainGeo.attributes.position.needsUpdate = true;
-  // eave drips: wait at the lip, then fall
-  for (let i = 0; i < dripVel.length; i++) {
+  if (rainGeo) rainGeo.attributes.position.needsUpdate = true;
+  // drips: wait at the lip, then fall
+  if (dripGeo) for (let i = 0; i < dripVel.length; i++) {
     if (dripWait[i] > 0) { dripWait[i] -= dt; continue; }
     let y = dripPos[i * 6 + 1];
     if (y < 0) { y = dripTop[i]; }
     y -= dripVel[i] * dt;
-    if (y < 0.05) { dripWait[i] = 0.4 + Math.random() * 2.6; y = -1; }
+    if (y < 0.05) { dripWait[i] = dripBaseWait + Math.random() * dripMaxWait; y = -1; }
     dripPos[i * 6] = dripX[i]; dripPos[i * 6 + 1] = y; dripPos[i * 6 + 2] = dripZ[i];
     dripPos[i * 6 + 3] = dripX[i]; dripPos[i * 6 + 4] = y + 0.14; dripPos[i * 6 + 5] = dripZ[i];
   }
   if (dripGeo) dripGeo.attributes.position.needsUpdate = true;
+  // gutters: dashes run toward the shrine end and loop
+  if (flowGeo) for (let i = 0; i < flowVel.length; i++) {
+    let z = flowPos[i * 6 + 2] - flowVel[i] * dt;
+    if (z < -29.4) z = 9.6 + Math.random() * 0.4;
+    flowPos[i * 6 + 2] = z; flowPos[i * 6 + 5] = z + 0.55;
+  }
+  if (flowGeo) flowGeo.attributes.position.needsUpdate = true;
+  // rain chains: droplets stream down the links
+  if (chainGeo) for (let i = 0; i < chainVel.length; i++) {
+    let y = chainPos[i * 6 + 1] - chainVel[i] * dt;
+    if (y < 0.18) y = 2.6 + Math.random() * 0.2;
+    chainPos[i * 6 + 1] = y; chainPos[i * 6 + 4] = y + 0.12;
+  }
+  if (chainGeo) chainGeo.attributes.position.needsUpdate = true;
 }
 
 // ================= KITSUNE GUARDIANS =================
+const kitsuneEyeMats = [];
+let kitsuneBeads = 0;
 {
   const stoneF = new THREE.MeshStandardMaterial({ color: 0x8f8a81, roughness: 0.95 });
+  // rain season wets the stone: darker, tighter roughness, and beads gathering on upward faces
+  const kitsuneWet = SEASON === 'rain';
+  if (kitsuneWet) { stoneF.color.setHex(0x75716a); stoneF.roughness = 0.5; }
+  const beadMat = kitsuneWet ? new THREE.MeshStandardMaterial({ color: 0xcfe0e8, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.9, emissive: 0x22323c, emissiveIntensity: 0.7 }) : null;
   function fox(mirror) {
     const g = new THREE.Group();
     const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.24, 0.5), stoneF); base.position.y = 0.12; g.add(base);
@@ -1011,6 +1254,13 @@ function updateRain(dt) {
       const ear = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 6), stoneF);
       ear.position.set(m * 0.075, 0.95, 0.1); g.add(ear);
     }
+    // eyes that catch the lantern light
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: 0.4, emissive: 0xffb85c, emissiveIntensity: 0.12 });
+    for (const em2 of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), eyeMat);
+      eye.position.set(em2 * 0.055, 0.855, 0.262); g.add(eye);
+    }
+    kitsuneEyeMats.push(eyeMat);
     // curled tail rising behind
     const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.075, 0.42, 8), stoneF);
     tail.position.set(mirror * 0.16, 0.55, -0.14); tail.rotation.z = mirror * 0.5; tail.rotation.x = -0.35; g.add(tail);
@@ -1021,6 +1271,26 @@ function updateRain(dt) {
     } else {
       const key = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.02), M.gold);
       key.position.set(0, 0.68, 0.24); key.rotation.z = 0.4; g.add(key);
+    }
+    if (beadMat) {
+      let bseed = (mirror + 2) * 431;
+      const brnd = () => (bseed = (bseed * 16807) % 2147483647) / 2147483647;
+      // beads gather on the upward faces: crown of the head, dome of the haunches
+      for (const spot of [[0, 0.82, 0.12, 0.125, 1], [0, 0.42, 0, 0.2, 1.1]]) {
+        const n = 5 + Math.floor(brnd() * 4);
+        for (let i = 0; i < n; i++) {
+          const th = brnd() * Math.PI * 2, ph = brnd() * Math.PI * 0.42; // top hemisphere only
+          const b = new THREE.Mesh(new THREE.SphereGeometry(0.007 + brnd() * 0.008, 6, 5), beadMat);
+          b.position.set(spot[0] + Math.sin(ph) * Math.cos(th) * spot[3], spot[1] + Math.cos(ph) * spot[3] * spot[4], spot[2] + Math.sin(ph) * Math.sin(th) * spot[3]);
+          g.add(b); kitsuneBeads++;
+        }
+      }
+      // and along the plinth's top edge, where rain sits
+      for (let i = 0; i < 4; i++) {
+        const b = new THREE.Mesh(new THREE.SphereGeometry(0.007 + brnd() * 0.007, 6, 5), beadMat);
+        b.position.set((brnd() - 0.5) * 0.42, 0.245, (brnd() - 0.5) * 0.42);
+        g.add(b); kitsuneBeads++;
+      }
     }
     return g;
   }
@@ -1086,6 +1356,7 @@ function updateRain(dt) {
 let visitCount = 0;
 try { visitCount = (+localStorage.getItem('ls_visits') || 0) + 1; localStorage.setItem('ls_visits', String(visitCount)); } catch (e) {}
 window.__visits = visitCount;
+let mossPostPatches = 0, sootBands = 0, verdPatches = 0;
 {
   // moss creeps onto the path from the third visit
   if (visitCount >= 3) {
@@ -1099,6 +1370,61 @@ window.__visits = visitCount;
       m.rotation.x = -Math.PI / 2;
       m.position.set((rnd() < 0.5 ? -1 : 1) * (1.0 + rnd() * 1.1), 0.115, 10 - rnd() * 34);
       m.receiveShadow = true; world.add(m);
+    }
+  }
+  // moss climbs the kairo posts as the visits add up
+  if (visitCount >= 2) {
+    const mossMat2 = new THREE.MeshStandardMaterial({ color: 0x55663c, roughness: 1, emissive: 0x24301a, emissiveIntensity: 1.0 });
+    let seed2 = visitCount * 977;
+    const rnd2 = () => (seed2 = (seed2 * 16807) % 2147483647) / 2147483647;
+    const climb = Math.min(0.1 + visitCount * 0.09, 0.85);
+    for (const side of [-1, 1]) {
+      for (let z = 10; z >= -30; z -= 5) {
+        const blobs = Math.min(1 + Math.floor((visitCount + rnd2() * 4) / 4), 4);
+        for (let b = 0; b < blobs; b++) {
+          const r = 0.08 + rnd2() * 0.09;
+          const m = new THREE.Mesh(new THREE.CircleGeometry(r, 8), mossMat2);
+          const ang = rnd2() * Math.PI * 2;
+          m.position.set(side * 12 + Math.cos(ang) * 0.118, 0.08 + rnd2() * climb, z + Math.sin(ang) * 0.118);
+          m.rotation.y = Math.PI / 2 - ang; // face outward from the post surface
+          m.scale.y = 1.3 + rnd2() * 0.9; // creeping patches stretch upward
+          world.add(m); mossPostPatches++;
+        }
+      }
+    }
+  }
+  // soot darkens the lantern house rims as the years of visits add up
+  if (visitCount >= 2) {
+    const sootMat = new THREE.MeshStandardMaterial({ color: 0x171310, roughness: 1, transparent: true, opacity: Math.min(0.2 + visitCount * 0.055, 0.8) });
+    let seed3 = visitCount * 311;
+    const rnd3 = () => (seed3 = (seed3 * 16807) % 2147483647) / 2147483647;
+    for (const l of lanterns) {
+      // one band hugging the fire-box rim: over the paper's top edge, under the roof
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.535, 0.13, 0.535), sootMat);
+      band.position.set(l.x + (rnd3() - 0.5) * 0.02, 1.405, l.z + (rnd3() - 0.5) * 0.02);
+      world.add(band); sootBands++;
+    }
+  }
+  // verdigris greens the offering bells' bronze at the edges over visits
+  if (visitCount >= 3) {
+    const verdMat = new THREE.MeshStandardMaterial({ color: 0x4e7f6d, roughness: 0.95, transparent: true, opacity: Math.min(0.15 + visitCount * 0.06, 0.85) });
+    let seed4 = visitCount * 613;
+    const rnd4 = () => (seed4 = (seed4 * 16807) % 2147483647) / 2147483647;
+    for (const b of bells) {
+      // the flared lip greens first - a thin patina ring hugging the bronze
+      const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.154, 0.194, 0.07, 12, 1, true), verdMat);
+      lip.position.y = -0.115; b.bell.add(lip); verdPatches++;
+      // streaks creep up from the lip as the years add up
+      const streaks = Math.min(1 + Math.floor(visitCount / 3), 4);
+      for (let s = 0; s < streaks; s++) {
+        const sy = -0.08 + rnd4() * 0.1;
+        const rr = 0.02 + (0.15 - sy) * 0.5667 + 0.003; // bell surface at this height
+        const st = new THREE.Mesh(new THREE.PlaneGeometry(0.025 + rnd4() * 0.03, 0.06 + rnd4() * 0.09), verdMat);
+        const ang = rnd4() * Math.PI * 2;
+        st.position.set(Math.sin(ang) * rr, sy, Math.cos(ang) * rr);
+        st.rotation.y = ang;
+        b.bell.add(st); verdPatches++;
+      }
     }
   }
   // a small jizo with a vermilion bib appears from the sixth visit, watching the path
@@ -1130,6 +1456,20 @@ function startDawn() {
     hemiI: hemi.intensity, moonI: moon.intensity, duskI: dusk.intensity,
   };
   dawnOn = true;
+  // the dawn chorus: sparse birdsong greeting the light
+  for (let i = 0; i < 7; i++) birdCall(2500 + i * (2200 + Math.random() * 1500));
+}
+let chorusBirds = 0;
+function birdCall(delay) {
+  setTimeout(() => {
+    chorusBirds++;
+    if (!AC) return;
+    const base = 2200 + Math.random() * 1400, n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const f = base * (0.92 + Math.random() * 0.2);
+      setTimeout(() => tone(f, f * (0.9 + Math.random() * 0.25), 'sine', 0.09 + Math.random() * 0.07, 0.028), i * (90 + Math.random() * 70));
+    }
+  }, delay);
 }
 function updateDawn(T, dt) {
   if (!dawnOn) return;
@@ -1142,6 +1482,7 @@ function updateDawn(T, dt) {
   dusk.intensity = dawnFrom.duskI + e * 0.4;
   for (const rm of kairoRidges) rm.emissiveIntensity = e * 1.0;
   kobanScatterMat.emissiveIntensity = e * 0.7;
+  kobanTrailMat.emissiveIntensity = 0.28 + e * 0.5;
   if (dawnT > 0.6 && Math.random() < dt * 0.22) {
     // first birds: two-note chirps, sparse
     const b = 3100 + Math.random() * 1100;
@@ -1183,6 +1524,11 @@ let furinBreeze = 0;
 function updateFurin(T, dt) {
   // slow layered breeze, 0..1
   furinBreeze = 0.5 + 0.5 * Math.sin(T * 0.13 + Math.sin(T * 0.043) * 2.2) * Math.sin(T * 0.031 + 1.7);
+  if (SEASON === 'rain') {
+    // storm wind: higher floor, sharp gusts
+    const gust = Math.max(0, Math.sin(T * 0.9 + Math.sin(T * 0.37) * 3.0));
+    furinBreeze = Math.min(1, 0.25 + furinBreeze * 0.65 + gust * 0.45);
+  }
   for (const f of furins) {
     const sway = furinBreeze * furinBreeze;
     f.g.rotation.x = Math.sin(T * 1.4 + f.phase) * 0.14 * sway;
@@ -1194,6 +1540,24 @@ function updateFurin(T, dt) {
       tone(base, base * 0.995, 'sine', 1.6, 0.05);
       tone(base * 1.51, base * 1.51, 'sine', 0.9, 0.02);
     }
+  }
+}
+
+let lastEmaClack = 0, emaClacks = 0, kitsuneGlow = 0.12, lastRustle = 0, rustles = 0;
+function updateEmaBreeze(T, dt) {
+  if (!emaPlaques.length) return;
+  const sw = furinBreeze * furinBreeze;
+  for (const m of emaPlaques) {
+    m.rotation.z = m.userData.baseZ + Math.sin(T * 3.1 + m.userData.phase) * 0.035 * sw;
+    m.rotation.y = m.userData.baseY + Math.sin(T * 2.3 + m.userData.phase * 1.7) * 0.06 * sw;
+  }
+  // wooden clacks when the wind picks up; rain-soaked wood clacks lower and more often
+  const rainy = SEASON === 'rain';
+  if (furinBreeze > (rainy ? 0.72 : 0.8) && T - lastEmaClack > (rainy ? 0.65 : 1.1) && Math.random() < dt * (rainy ? 2.4 : 1.6)) {
+    lastEmaClack = T; emaClacks++;
+    const f = rainy ? 130 + Math.random() * 60 : 170 + Math.random() * 90;
+    tone(f, f * 0.72, 'triangle', rainy ? 0.04 : 0.05, rainy ? 0.055 : 0.07);
+    if (Math.random() < 0.4) setTimeout(() => tone((rainy ? 120 : 150) + Math.random() * 70, 110, 'triangle', 0.045, 0.05), 90 + Math.random() * 140);
   }
 }
 
@@ -1338,16 +1702,35 @@ function tick() {
   for (const l of lanterns) if (l.lit) {
     l.light.intensity = 26 + Math.sin(T * 7 + l.flick) * 3.5 + Math.sin(T * 23 + l.flick * 3) * 1.5;
     l.paper.material.emissiveIntensity = 1.6 + Math.sin(T * 9 + l.flick) * 0.25;
+    const poolFlick = 0.92 + Math.sin(T * 7 + l.flick) * 0.08 + Math.sin(T * 23 + l.flick * 3) * 0.04;
+    l.pool.material.opacity = (0.2 + poolWet * 0.34) * poolFlick;
+    if (l.streak) l.streak.material.opacity = 0.27 * poolFlick;
   }
   updateRain(dt);
   updateKobanDrops(dt);
   updateBasin(dt);
   updateStars(dt);
   updateFurin(T, dt);
+  updateEmaBreeze(T, dt);
+  // kitsune eyes brighten as the path lights up
+  kitsuneGlow = 0.12 + (lanterns.length ? litCount / lanterns.length : 0) * 1.0;
+  for (const em of kitsuneEyeMats) em.emissiveIntensity = kitsuneGlow;
+  updateMoths(T);
   // hanging things answer the breeze
   const sw = furinBreeze * furinBreeze;
   for (let i = 0; i < emaPlaques.length; i++) { const p = emaPlaques[i]; p.rotation.y = Math.sin(i * 3.1) * 0.12 + Math.sin(T * 1.5 + i * 1.3) * 0.1 * sw; }
-  for (let i = 0; i < tiedStrips.length; i++) { const st = tiedStrips[i]; st.rotation.x = Math.sin(T * 1.8 + i * 0.9) * 0.16 * sw; }
+  const paperLoad = Math.min(tiedStrips.length, 10);
+  for (let i = 0; i < tiedStrips.length; i++) {
+    const st = tiedStrips[i];
+    st.rotation.x = Math.sin(T * 1.8 + i * 0.9) * 0.16 * sw * (1 + paperLoad * 0.1);
+    if (tiedStrips.length >= 8) st.rotation.z = st.userData.baseZ + Math.sin(T * 7 + i * 1.7) * 0.05 * sw;
+  }
+  // a heavily laden rack rustles when the wind peaks
+  if (tiedStrips.length >= 8 && furinBreeze > 0.82 && T - lastRustle > 2.5 && Math.random() < dt * 3) {
+    lastRustle = T; rustles++;
+    const rf = 900 + Math.random() * 500;
+    tone(rf, rf * 0.8, 'triangle', 0.05, 0.018);
+  }
   updateDawn(T, dt);
   // bell swing after ring
   for (const b of bells) if (b.swingT > 0) {
@@ -1431,4 +1814,5 @@ window.__setcam = (x, y, z, yaw, pitch) => { player.pos.set(x, y, z); player.yaw
 window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON });
+window.__tie = () => { tieToRack(); return tiedStrips.length; };
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length });
