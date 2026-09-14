@@ -159,6 +159,8 @@ let flapAmpNow = 1, flapSpdNow = 2.2; // v118: the tanzaku's live flutter envelo
 const ladleFeathers = []; // v119: the rime creeping down the ladle's wood grain
 const ladleBarbGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.06, 6); // v119
 const emaCornerFrost = []; // v120: corner rime on each plaque - the newest wishes take the cold hardest
+const emaWet = []; let wetE = 0; // v126: the dawn thaw wets the plaques and the ink darkens
+const wetTint = new THREE.Color(0xc4b8a4); // v126: damp wood
 const emaFrostGeo = new THREE.PlaneGeometry(0.09, 0.07); // v120
 const basinIce = []; // v121: ice rimming the rain-chain basins, thickening inward through the cold
 const basinIceGeos = [new THREE.RingGeometry(0.3, 0.36, 16), new THREE.RingGeometry(0.26, 0.32, 16), new THREE.RingGeometry(0.22, 0.28, 16)]; // v121
@@ -209,7 +211,7 @@ let hoarStir = 0, stirCount = 0; // v101: the sleeper's breath rides a watch gus
 let kobanRay = 0; // v102: dawn touches the second koban first
 let sealRay = 0, omiSealMat = null; // v103: the seal answers a heartbeat after the koban
 const sasRidges = []; let sasMig = 0; // v104: sastrugi - wind-combed ripples on the courtyard drifts
-const plumeMotes = []; let plumeCount = 0, nextPlumeT = 0; // v105: snow smoking off the torii lintel drifts
+const plumeMotes = []; let plumeCount = 0, nextPlumeT = 0, plumeG2 = 0; // v105: snow smoking off the torii lintel drifts
 const plumeGates = [{ w: 5.64, y: 5.12, z: 6 }, { w: 4.79, y: 4.35, z: -10 }]; // the v67 drift lines
 const plumeGeo = new THREE.SphereGeometry(0.032, 6, 5);
 const plumeMat = new THREE.MeshStandardMaterial({ color: 0xf0f5f8, roughness: 0.9, transparent: true, opacity: 0.7, emissive: 0x9fb2c0, emissiveIntensity: 0.45 });
@@ -1597,12 +1599,14 @@ function renderEmaRack(list, base, key) {
       emaCornerFrost.push({ l: fl, r: fr, w: weather });
     }
     world.add(m); emaPlaques.push(m);
+    if (SEASON === 'snow') emaWet.push(m.material); // v126
   });
 }
 function renderEma() {
   for (const p of emaPlaques) world.remove(p);
   emaPlaques.length = 0;
   emaCornerFrost.length = 0; // v120: the patches go with their plaques
+  emaWet.length = 0; // v126
   if (emaWishes.length > 24) {
     buildEmaRack2(); buildEmaRack3();
     const all = emaWishes.slice(-36);
@@ -2830,6 +2834,14 @@ function tick() {
       rm.metalness = 0.6 - 0.45 * rimeE;
     }
     for (const gp of guardianRime) gp.material.opacity = 0.85 * rimeE; // v124: the komainu weather with their shrine
+    // v126: as the thaw loosens the snow, meltwater wets the rack - wood and ink
+    // darken together, then dry back slowly once the night returns
+    const twW = dawnOn ? Math.min(1, Math.max(0, (dawnT - 0.55) / 0.35)) : 0;
+    wetE = Math.max(wetE - dt / 600, twW);
+    for (const wm of emaWet) {
+      wm.color.setHex(0xffffff).lerp(wetTint, wetE * 0.85);
+      wm.emissiveIntensity = 0.22 - 0.1 * wetE;
+    }
   }
   // v115: over a long snow night the fall fills the visitor's boot prints back in -
   // each print fades and spreads as the drift quietly takes the crossing
@@ -2862,14 +2874,17 @@ function tick() {
   if (SEASON === 'snow' && lanternThaw.length) {
     const tw = dawnOn ? Math.min(1, Math.max(0, (dawnT - 0.55) / 0.35)) : 0;
     slumpE = tw;
-    for (const lt of lanternThaw) {
-      lt.dollop.scale.set(1 - 0.3 * tw, 0.55 * (1 - 0.45 * tw), 1 - 0.3 * tw);
-      lt.dollop.position.x = lt.dir * 0.05 * tw;
-      const s = 0.01 + 0.99 * tw;
+    lanternThaw.forEach((lt, i) => {
+      // v127: a lit lantern's own flame melts its own shoulder, long before the dawn
+      if (lanterns[i] && lanterns[i].lit) lt.fm = Math.min(1, (lt.fm || 0) + dt / 150);
+      const mel = Math.max(tw, lt.fm || 0);
+      lt.dollop.scale.set(1 - 0.3 * mel, 0.55 * (1 - 0.45 * mel), 1 - 0.3 * mel);
+      lt.dollop.position.x = lt.dir * 0.05 * mel;
+      const s = 0.01 + 0.99 * mel;
       lt.slump.scale.set(s, s * 0.55, s);
-      lt.slump.position.set(lt.dir * (0.26 + 0.1 * tw), 1.66 - 0.14 * tw, 0.06);
-      lt.slump.rotation.z = -lt.dir * 0.5 * tw;
-    }
+      lt.slump.position.set(lt.dir * (0.26 + 0.1 * mel), 1.66 - 0.14 * mel, 0.06);
+      lt.slump.rotation.z = -lt.dir * 0.5 * mel;
+    });
   }
   // v98: the thaw undermines the basin ice - it sags below the rim, darkens, thins
   if (SEASON === 'snow' && chozuIce) {
@@ -2896,7 +2911,9 @@ function tick() {
   // plume streams downwind off the beam, arcing and settling as it disperses
   if (SEASON === 'snow' && furinBreeze > 0.85 && T > nextPlumeT) {
     nextPlumeT = T + 0.035;
-    const pg = Math.random() < 0.55 ? plumeGates[0] : plumeGates[1];
+    const gate2Open = lanterns[3].lit || lanterns[4].lit; // v125: the second gate smokes only once its own lantern burns - the gate earns its weather
+    const pg = (!gate2Open || Math.random() < 0.55) ? plumeGates[0] : plumeGates[1];
+    if (pg === plumeGates[1]) plumeG2++;
     const m = new THREE.Mesh(plumeGeo, plumeMat.clone());
     m.position.set((Math.random() - 0.5) * pg.w, pg.y, pg.z + (Math.random() - 0.5) * 0.3);
     m.userData = { vx: (Math.random() - 0.5) * 0.35, vy: 0.35 + Math.random() * 0.3, vz: -(1.1 + 1.6 * furinBreeze), t: 0, life: 1.1 + Math.random() * 0.5 };
@@ -3100,6 +3117,8 @@ tick();
 // ---------- QA hooks ----------
 window.__p3state = () => ({ pos: player.pos.toArray(), vel: player.vel.toArray(), ground: player.ground, yaw: player.yaw });
 window.__teleport = (x, y, z) => { player.pos.set(x, y, z); player.vel.set(0, 0, 0); };
+window.__light = i => { const l = lanterns[i]; if (l && !l.lit) lightLantern(l); }; // v125: QA - light one lantern by index
+window.__flameMelt = v => { lanternThaw.forEach((lt, i) => { if (lanterns[i] && lanterns[i].lit) lt.fm = v; }); }; // v127: QA - force the flame-melt factor, lit lanterns only
 window.__footstep = footstep; // v114
 window.__snowDepth = (x, z) => +snowDepthAt(+x, +z).toFixed(2); // v114
 window.__catstep = n => advanceCat(n);
@@ -3146,4 +3165,4 @@ window.__rime = v => { if (SEASON !== 'snow') return -1; rimeCold = Math.min(1, 
 window.__seedEma = n => { emaWishes = []; for (let i = 0; i < n; i++) emaWishes.push('wish ' + (i + 1)); renderEma(); return emaPlaques.length; }; // v120 QA
 window.__visit2 = () => { if (SEASON === 'snow') buildVisitorReturn(); return ret; };
 window.__breathPhase = v => { humpBreathPhase = +v; applyAccum(); return humpGrowMeshes.length > 1 ? +humpGrowMeshes[1].m.scale.y.toFixed(4) : -1; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), knot: tiedStrips.filter(s => s.userData.knot).length, knotT: +stripTight.toFixed(2), knotS: tiedStrips.length && tiedStrips[0].userData.knot ? +tiedStrips[0].userData.knot.scale.x.toFixed(2) : -1, strm: tiedStrips.length ? +tiedStrips[0].rotation.x.toFixed(2) : -1, sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fover: furinOver, fovw: +furinOvw.toFixed(2), fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, sag: +ropeSag.toFixed(3), slump: +slumpE.toFixed(2), slumpN: lanternThaw.length, weep: toriiWeep, cIceY: chozuIce ? +chozuIce.position.y.toFixed(3) : -1, cIceO: chozuIce ? +chozuIce.material.opacity.toFixed(2) : -1, slide: +slideE.toFixed(2), slideY: kairoSlides.length ? +kairoSlides[0].m.position.y.toFixed(2) : -1, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, watch: watchCount, watchP: breathPuffs.filter(p => p.userData.watch).length, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), iceRill: +iceLen.toFixed(1), paws, hump: snowHump, humpKoban, visitor, ret, pawV: pawPrints.filter(p => p.m.material.opacity > 0.01).length, spurOp: spurPrints.length ? +spurPrints[0].m.material.opacity.toFixed(3) : -1, ema2, emaY: humpEma ? +humpEma.plaque.position.y.toFixed(3) : -1, omiS, omiOp: humpOmi ? +humpOmi.material.opacity.toFixed(3) : -1, hol: earHollows.length, holO: earHollows.length ? +earHollows[0].dm.material.opacity.toFixed(2) : -1, holS: earHollows.length ? +earHollows[0].dm.scale.x.toFixed(3) : -1, hoar: hoarNeedles.length, hoarE: +hoarE.toFixed(2), stir: +hoarStir.toFixed(2), stirs: stirCount, ray: +kobanRay.toFixed(2), kob2: humpKobanMesh2 ? +humpKobanMesh2.material.emissiveIntensity.toFixed(2) : -1, seal: +sealRay.toFixed(2), sealE: omiSealMat ? +omiSealMat.emissiveIntensity.toFixed(2) : -1, sas: sasRidges.length, sasM: +sasMig.toFixed(2), sasY: sasRidges.length ? +sasRidges[0].m.scale.y.toFixed(2) : -1, ig: iceGlints.length, igV: iceGlints.filter(g => g.m.visible).length, igE: +iceGlintE.toFixed(2), trax: foxTracks.length, traxR: foxTracks.filter(t => t.reveal > 0.99).length, traxO: foxTracks.length ? +foxTracks[0].m.material.opacity.toFixed(3) : -1, traxS: traxLive ? 2 : (traxArmed ? 1 : 0), traxE: +traxErode.toFixed(2), traxW: foxTracks.length ? +foxTracks[0].m.scale.y.toFixed(2) : -1, skim: skimPatches.length + (skimRing ? 1 : 0) + (skimFilm ? 1 : 0), skimE: +refreezeE.toFixed(2), skimP: rillPool ? +rillPoolMat.emissiveIntensity.toFixed(2) : -1, plume: plumeMotes.length, plumes: plumeCount, acc: +humpAcc.toFixed(2), ribsY: humpGrowMeshes.length > 1 ? +humpGrowMeshes[1].m.scale.y.toFixed(4) : -1, brR: +breathRate.toFixed(2), accOp: visitorPrints.length ? +visitorPrints[0].m.material.opacity.toFixed(3) : -1, stp: creakSteps, crk: creaks, crkD: +creakD.toFixed(2), fill: +printFillE.toFixed(2), fillS: visitorPrints.length ? +visitorPrints[0].m.scale.x.toFixed(2) : -1, rime: kobanRime.length, rimeE: +rimeE.toFixed(2), rimeO: kobanRime.length ? +kobanRime[0].rm.material.opacity.toFixed(2) : -1, rfO: furins.length ? +furins[0].glass.material.opacity.toFixed(2) : -1, rfR: furins.length ? +furins[0].glass.material.roughness.toFixed(2) : -1, amp: +flapAmpNow.toFixed(3), spd: +flapSpdNow.toFixed(2), lf2: ladleFeathers.length, lfF: ladleFeathers.length ? +ladleFeathers[0].m.scale.y.toFixed(2) : -1, lfL: ladleFeathers.length ? +ladleFeathers[ladleFeathers.length - 1].m.scale.y.toFixed(2) : -1, ef2: emaCornerFrost.length, efF: emaCornerFrost.length ? +emaCornerFrost[emaCornerFrost.length - 1].l.material.opacity.toFixed(2) : -1, efO: emaCornerFrost.length ? +emaCornerFrost[0].l.material.opacity.toFixed(2) : -1, ibr: basinIce.length, ibrO: basinIce.length ? +basinIce[0].m.material.opacity.toFixed(2) : -1, ibrI: basinIce.length ? +basinIce[basinIce.length - 1].m.material.opacity.toFixed(2) : -1, crst: lintelCrust.length, crstO: lintelCrust.length ? +lintelCrust[0].m.material.opacity.toFixed(2) : -1, shed: crustSheds, shedE: lintelCrust.length ? +lintelCrust[0].shed.toFixed(2) : -1, rgC: kairoRidges.length ? kairoRidges[0].color.getHexString() : '-', rgR: kairoRidges.length ? +kairoRidges[0].roughness.toFixed(2) : -1, rgM: kairoRidges.length ? +kairoRidges[0].metalness.toFixed(2) : -1, gr2: guardianRime.length, grO: guardianRime.length ? +guardianRime[0].material.opacity.toFixed(2) : -1 });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), knot: tiedStrips.filter(s => s.userData.knot).length, knotT: +stripTight.toFixed(2), knotS: tiedStrips.length && tiedStrips[0].userData.knot ? +tiedStrips[0].userData.knot.scale.x.toFixed(2) : -1, strm: tiedStrips.length ? +tiedStrips[0].rotation.x.toFixed(2) : -1, sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fover: furinOver, fovw: +furinOvw.toFixed(2), fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, sag: +ropeSag.toFixed(3), slump: +slumpE.toFixed(2), slumpN: lanternThaw.length, weep: toriiWeep, cIceY: chozuIce ? +chozuIce.position.y.toFixed(3) : -1, cIceO: chozuIce ? +chozuIce.material.opacity.toFixed(2) : -1, slide: +slideE.toFixed(2), slideY: kairoSlides.length ? +kairoSlides[0].m.position.y.toFixed(2) : -1, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, watch: watchCount, watchP: breathPuffs.filter(p => p.userData.watch).length, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), iceRill: +iceLen.toFixed(1), paws, hump: snowHump, humpKoban, visitor, ret, pawV: pawPrints.filter(p => p.m.material.opacity > 0.01).length, spurOp: spurPrints.length ? +spurPrints[0].m.material.opacity.toFixed(3) : -1, ema2, emaY: humpEma ? +humpEma.plaque.position.y.toFixed(3) : -1, omiS, omiOp: humpOmi ? +humpOmi.material.opacity.toFixed(3) : -1, hol: earHollows.length, holO: earHollows.length ? +earHollows[0].dm.material.opacity.toFixed(2) : -1, holS: earHollows.length ? +earHollows[0].dm.scale.x.toFixed(3) : -1, hoar: hoarNeedles.length, hoarE: +hoarE.toFixed(2), stir: +hoarStir.toFixed(2), stirs: stirCount, ray: +kobanRay.toFixed(2), kob2: humpKobanMesh2 ? +humpKobanMesh2.material.emissiveIntensity.toFixed(2) : -1, seal: +sealRay.toFixed(2), sealE: omiSealMat ? +omiSealMat.emissiveIntensity.toFixed(2) : -1, sas: sasRidges.length, sasM: +sasMig.toFixed(2), sasY: sasRidges.length ? +sasRidges[0].m.scale.y.toFixed(2) : -1, ig: iceGlints.length, igV: iceGlints.filter(g => g.m.visible).length, igE: +iceGlintE.toFixed(2), trax: foxTracks.length, traxR: foxTracks.filter(t => t.reveal > 0.99).length, traxO: foxTracks.length ? +foxTracks[0].m.material.opacity.toFixed(3) : -1, traxS: traxLive ? 2 : (traxArmed ? 1 : 0), traxE: +traxErode.toFixed(2), traxW: foxTracks.length ? +foxTracks[0].m.scale.y.toFixed(2) : -1, skim: skimPatches.length + (skimRing ? 1 : 0) + (skimFilm ? 1 : 0), skimE: +refreezeE.toFixed(2), skimP: rillPool ? +rillPoolMat.emissiveIntensity.toFixed(2) : -1, plume: plumeMotes.length, plumes: plumeCount, pl2: plumeG2, acc: +humpAcc.toFixed(2), ribsY: humpGrowMeshes.length > 1 ? +humpGrowMeshes[1].m.scale.y.toFixed(4) : -1, brR: +breathRate.toFixed(2), accOp: visitorPrints.length ? +visitorPrints[0].m.material.opacity.toFixed(3) : -1, stp: creakSteps, crk: creaks, crkD: +creakD.toFixed(2), fill: +printFillE.toFixed(2), fillS: visitorPrints.length ? +visitorPrints[0].m.scale.x.toFixed(2) : -1, rime: kobanRime.length, rimeE: +rimeE.toFixed(2), rimeO: kobanRime.length ? +kobanRime[0].rm.material.opacity.toFixed(2) : -1, rfO: furins.length ? +furins[0].glass.material.opacity.toFixed(2) : -1, rfR: furins.length ? +furins[0].glass.material.roughness.toFixed(2) : -1, amp: +flapAmpNow.toFixed(3), spd: +flapSpdNow.toFixed(2), lf2: ladleFeathers.length, lfF: ladleFeathers.length ? +ladleFeathers[0].m.scale.y.toFixed(2) : -1, lfL: ladleFeathers.length ? +ladleFeathers[ladleFeathers.length - 1].m.scale.y.toFixed(2) : -1, ef2: emaCornerFrost.length, efF: emaCornerFrost.length ? +emaCornerFrost[emaCornerFrost.length - 1].l.material.opacity.toFixed(2) : -1, efO: emaCornerFrost.length ? +emaCornerFrost[0].l.material.opacity.toFixed(2) : -1, ibr: basinIce.length, ibrO: basinIce.length ? +basinIce[0].m.material.opacity.toFixed(2) : -1, ibrI: basinIce.length ? +basinIce[basinIce.length - 1].m.material.opacity.toFixed(2) : -1, crst: lintelCrust.length, crstO: lintelCrust.length ? +lintelCrust[0].m.material.opacity.toFixed(2) : -1, shed: crustSheds, shedE: lintelCrust.length ? +lintelCrust[0].shed.toFixed(2) : -1, rgC: kairoRidges.length ? kairoRidges[0].color.getHexString() : '-', rgR: kairoRidges.length ? +kairoRidges[0].roughness.toFixed(2) : -1, rgM: kairoRidges.length ? +kairoRidges[0].metalness.toFixed(2) : -1, gr2: guardianRime.length, grO: guardianRime.length ? +guardianRime[0].material.opacity.toFixed(2) : -1, wetN: emaWet.length, wet: +wetE.toFixed(2), fm2: lanternThaw.filter(lt => (lt.fm || 0) > 0.5).length, s0: lanternThaw.length ? +lanternThaw[0].slump.scale.x.toFixed(2) : -1, s2: lanternThaw.length > 2 ? +lanternThaw[2].slump.scale.x.toFixed(2) : -1 });
