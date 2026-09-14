@@ -1102,10 +1102,12 @@ function updateBasin(dt) {
       // most rings bloom where the spout lands; the rest are rain scatter
       const impact = Math.random() < 0.65;
       const a = Math.random() * Math.PI * 2, rr = impact ? Math.random() * 0.06 : 0.08 + Math.random() * 0.14;
+      // v60: gusts push the dimple field upwind - the same wind that leans the rain touches the water
+      lastDimpleBias = rainSlant * (0.08 + Math.random() * 0.12);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.018, 0.032, 12),
         new THREE.MeshBasicMaterial({ color: 0xaec6d8, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
       ring.rotation.x = -Math.PI / 2;
-      ring.position.set(side * 10.62 + Math.cos(a) * rr, 0.175, -30 + Math.sin(a) * rr);
+      ring.position.set(side * 10.62 + Math.cos(a) * rr + lastDimpleBias, 0.175, -30 + Math.sin(a) * rr);
       world.add(ring); basinRipples.push({ m: ring, t: 0.9 }); kairoDimples++;
     }
   }
@@ -1120,6 +1122,7 @@ function updateBasin(dt) {
 let rainGeo = null, rainPos = null, rainVel = null;
 let flowGeo = null, flowPos = null, flowVel = null, chainGeo = null, chainPos = null, chainVel = null;
 let rackDripT = 0.8, kairoDimpleT = 0, kairoDimples = 0;
+let lastDimpleBias = 0; // v60: upwind offset of the latest basin ring, for QA
 let rainSlant = 0; // v59: how hard the gust wind is leaning the rain right now
 let dripGeo = null, dripPos = null, dripVel = null, dripWait = null, dripX = null, dripZ = null, dripTop = null;
 if (SEASON === 'rain') {
@@ -1902,4 +1905,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1 });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3) });
