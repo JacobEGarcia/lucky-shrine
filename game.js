@@ -399,6 +399,9 @@ let kice = 0; // v73
 let kfrost = 0; // v76
 let ferns = 0; // v77
 let breathCount = 0, nextBreathT = 2; const breathPuffs = []; const foxMuzzles = []; // v78
+let meltCount = 0, nextMeltT = 0; const meltDrops = []; // v79
+const meltGeo = new THREE.SphereGeometry(0.016, 6, 5);
+const meltMat = new THREE.MeshStandardMaterial({ color: 0xdfeaf2, roughness: 0.15, emissive: 0x8fa5b5, emissiveIntensity: 0.5, transparent: true, opacity: 0.85 });
 const icicles = []; // v75
 const glints = []; let glintCount = 0; // v75
 function kairo(side) {
@@ -2076,6 +2079,22 @@ function tick() {
     p.material.opacity = 0.24 * Math.max(0, 1 - u);
     if (u >= 1) { world.remove(p); p.material.dispose(); p.geometry.dispose(); breathPuffs.splice(i, 1); }
   }
+  // v79: snowmelt drips from the honden roof edge once the sun breaks through
+  if (SEASON === 'snow' && dawnOn && dawnT > 0.55 && T > nextMeltT) {
+    nextMeltT = T + 0.6 + Math.random() * 0.5;
+    meltCount++;
+    const d = new THREE.Mesh(meltGeo, meltMat);
+    d.position.set(-3.5 + Math.random() * 7, 4.18, -27.75);
+    d.userData.vy = 0;
+    world.add(d); meltDrops.push(d);
+  }
+  for (let i = meltDrops.length - 1; i >= 0; i--) {
+    const d = meltDrops[i];
+    d.userData.vy -= dt * 4.5;
+    d.position.y += d.userData.vy * dt;
+    d.scale.y = 1 + Math.min(2, -d.userData.vy * 0.4); // stretch as it falls
+    if (d.position.y < 0.95) { world.remove(d); meltDrops.splice(i, 1); }
+  }
   updateMoths(T);
   // hanging things answer the breeze
   const sw = furinBreeze * furinBreeze;
@@ -2193,4 +2212,4 @@ function fireBreath() {
 }
 window.__drip = (mode) => { fireIceDrip(mode === 'near'); return glintCount; };
 window.__breath = () => { fireBreath(); return breathCount; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, melt: meltCount });
