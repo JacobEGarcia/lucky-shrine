@@ -1120,6 +1120,7 @@ function updateBasin(dt) {
 let rainGeo = null, rainPos = null, rainVel = null;
 let flowGeo = null, flowPos = null, flowVel = null, chainGeo = null, chainPos = null, chainVel = null;
 let rackDripT = 0.8, kairoDimpleT = 0, kairoDimples = 0;
+let rainSlant = 0; // v59: how hard the gust wind is leaning the rain right now
 let dripGeo = null, dripPos = null, dripVel = null, dripWait = null, dripX = null, dripZ = null, dripTop = null;
 if (SEASON === 'rain') {
   const RN = 340;
@@ -1242,12 +1243,12 @@ function updateRain(dt) {
     }
   }
   if (rainGeo) for (let i = 0; i < rainVel.length; i++) {
-    rainPos[i * 6 + 1] -= rainVel[i] * dt; rainPos[i * 6] -= rainVel[i] * dt * 0.16;
+    rainPos[i * 6 + 1] -= rainVel[i] * dt; rainPos[i * 6] -= rainVel[i] * dt * (0.16 + rainSlant);
     if (rainPos[i * 6 + 1] < 0) {
       const x = (Math.random() - 0.5) * 40, z = 14 - Math.random() * 55;
       rainPos[i * 6] = x; rainPos[i * 6 + 1] = 11 + Math.random() * 2; rainPos[i * 6 + 2] = z;
     }
-    rainPos[i * 6 + 3] = rainPos[i * 6] + 0.06; rainPos[i * 6 + 4] = rainPos[i * 6 + 1] + 0.38; rainPos[i * 6 + 5] = rainPos[i * 6 + 2];
+    rainPos[i * 6 + 3] = rainPos[i * 6] + (0.16 + rainSlant) * 0.38; rainPos[i * 6 + 4] = rainPos[i * 6 + 1] + 0.38; rainPos[i * 6 + 5] = rainPos[i * 6 + 2];
   }
   if (rainGeo) rainGeo.attributes.position.needsUpdate = true;
   // drips: wait at the lip, then fall
@@ -1498,6 +1499,7 @@ let dawnFrom = null;
 const DAWN_TO = { bg: new THREE.Color(0x57404e), hemi: new THREE.Color(0xb89ab0), moon: new THREE.Color(0xffc9a0) };
 window.__dawn = j => { startDawn(); if (j) dawnT = j; };
 window.__flood = () => { kairoDimples = 400; return kairoDimples; };
+window.__slant = () => +rainSlant.toFixed(3);
 function startDawn() {
   dawnFrom = {
     bg: scene.background.clone(), fog: scene.fog.color.clone(),
@@ -1583,6 +1585,8 @@ function updateFurin(T, dt) {
     const gust = Math.max(0, Math.sin(T * 0.9 + Math.sin(T * 0.37) * 3.0));
     furinBreeze = Math.min(1, 0.25 + furinBreeze * 0.65 + gust * 0.45);
   }
+  // v59: the same envelope leans the rain itself - gusts tilt the streak field, then it settles upright
+  rainSlant += ((SEASON === 'rain' ? furinBreeze * 0.55 : 0) - rainSlant) * Math.min(1, dt * 2.0);
   const rainyF = SEASON === 'rain';
   for (const f of furins) {
     const sway = furinBreeze * furinBreeze;
