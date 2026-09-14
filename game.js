@@ -1644,7 +1644,7 @@ const furins = [];
     furins.push({ g, strip, phase: i * 2.1, lastTinkle: 0 });
   }
 }
-let furinBreeze = 0, furinRattles = 0, furinHushed = 0, furinTinkles = 0, furinPin = null;
+let furinBreeze = 0, furinRattles = 0, furinHushed = 0, furinTinkles = 0, furinPin = null, stripFlapMax = 0, stripVelMax = 0;
 function updateFurin(T, dt) {
   // slow layered breeze, 0..1
   furinBreeze = 0.5 + 0.5 * Math.sin(T * 0.13 + Math.sin(T * 0.043) * 2.2) * Math.sin(T * 0.031 + 1.7);
@@ -1663,8 +1663,15 @@ function updateFurin(T, dt) {
     const fg = rainyF ? Math.max(0, Math.sin(T * 0.23 + 1.1)) * furinBreeze * Math.max(0, Math.sin(T * 0.9 + f.phase * 0.6)) : 0;
     f.g.rotation.x = Math.sin(T * 1.4 + f.phase) * 0.14 * sway + Math.sin(T * 9.7 + f.phase * 2.3) * 0.12 * fg;
     f.g.rotation.z = Math.cos(T * 1.1 + f.phase) * 0.11 * sway + Math.cos(T * 8.3 + f.phase * 1.9) * 0.1 * fg;
-    f.strip.rotation.y = Math.sin(T * 2.2 + f.phase) * (0.2 + sway * 0.8) + Math.sin(T * 11 + f.phase) * 0.5 * fg;
+    // v66: snow frost-stiffens the tanzaku - slower, narrower flap to match the hush
+    const frostStiff = SEASON === 'snow';
+    const flapSpd = frostStiff ? 0.8 : 2.2, flapAmp = frostStiff ? 0.35 : 1.0;
+    const prevFlap = f.prevFlap || 0;
+    f.strip.rotation.y = Math.sin(T * flapSpd + f.phase) * (0.2 + sway * 0.8) * flapAmp + Math.sin(T * 11 + f.phase) * 0.5 * fg;
     f.strip.rotation.z = Math.sin(T * 7.7 + f.phase * 1.4) * 0.4 * fg;
+    f.prevFlap = f.strip.rotation.y;
+    const fa = Math.abs(f.strip.rotation.y); if (fa > stripFlapMax) stripFlapMax = fa;
+    if (dt > 0) { const fv = Math.abs(f.strip.rotation.y - prevFlap) / dt; if (fv > stripVelMax) stripVelMax = fv; }
     if (rainyF && fg > 0.55 && T - f.lastTinkle > 1.3 && Math.random() < dt * 6) {
       // the rattle: fast clustered strikes while the gust is on the chime
       f.lastTinkle = T; furinRattles++;
@@ -1975,4 +1982,4 @@ window.__renderShare = renderShare;
 window.__omiDraw = drawOmikuji;
 window.__omiState = () => ({ tier: lastDrawnTier, tied: tiedStrips.length, drawn: omiDrawn.length });
 window.__tie = () => { tieToRack(); return tiedStrips.length; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps });
