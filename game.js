@@ -761,6 +761,7 @@ const meltGeo = new THREE.SphereGeometry(0.016, 6, 5);
 const meltMat = new THREE.MeshStandardMaterial({ color: 0xdfeaf2, roughness: 0.15, emissive: 0x8fa5b5, emissiveIntensity: 0.5, transparent: true, opacity: 0.85 });
 let rillLen = 0, rillMesh = null; // v80
 let poolR = 0, rillPool = null; // v81
+let refreezeE = 0, refreezeOn = false, skimGroup = null, skimRing = null, skimFilm = null, lastRingE = -1; const skimPatches = []; // v108: the cold coming back after a melt day
 // v92: at night the rill lies frozen; the dawn melt takes the skin from the source downstream
 let iceLen = 0, iceMesh = null, icePoolMesh = null;
 let iceGlints = [], iceGlintE = 0; // v106: first light catches the frozen rill edges, gone once the light is general
@@ -768,6 +769,10 @@ const iceMat = new THREE.MeshStandardMaterial({ color: 0xdfe9f0, roughness: 0.35
 const icePoolMat = new THREE.MeshStandardMaterial({ color: 0xd6e2ea, roughness: 0.3, emissive: 0x93aabb, emissiveIntensity: 0.2, transparent: true, opacity: 0.55 });
 const iceGlintGeo = new THREE.SphereGeometry(0.02, 6, 5); // v106
 const foxTrackGeo = new THREE.CircleGeometry(0.042, 8); // v107: same pad as the cat's trail, scaled narrower and longer
+const skimPatchGeo = new THREE.SphereGeometry(0.09, 8, 5); // v108
+const skimFilmGeo = new THREE.CircleGeometry(0.55, 24); // v108
+const skimRingMat = new THREE.MeshStandardMaterial({ color: 0xc8d2d8, roughness: 0.6, metalness: 0.05, emissive: 0x8794a0, emissiveIntensity: 0.12, transparent: true, opacity: 0, side: THREE.DoubleSide }); // v108: duller than the v92 skin
+const skimFilmMat = new THREE.MeshStandardMaterial({ color: 0xc8d2d8, roughness: 0.65, metalness: 0.05, emissive: 0x8794a0, emissiveIntensity: 0.1, transparent: true, opacity: 0, side: THREE.DoubleSide }); // v108
 const rillPoolMat = new THREE.MeshStandardMaterial({ color: 0xbfd4de, roughness: 0.08, metalness: 0.35, emissive: 0x8fa8b8, emissiveIntensity: 0.3, transparent: true, opacity: 0.65 });
 const rillMat = new THREE.MeshStandardMaterial({ color: 0xcfe2ec, roughness: 0.2, emissive: 0x7d96a8, emissiveIntensity: 0.45, transparent: true, opacity: 0.55 });
 const icicles = []; // v75
@@ -2736,8 +2741,48 @@ function tick() {
     }
     poolR = Math.min(0.55, poolR + dt * 0.5);
     rillPool.scale.setScalar(poolR / 0.55);
-    rillPoolMat.emissiveIntensity = 0.15 + dawnT * 0.45;
+    rillPoolMat.emissiveIntensity = (0.15 + dawnT * 0.45) * (1 - 0.65 * refreezeE); // v108: the returning cold dulls the mirror
   } else if (rillPool) { world.remove(rillPool); rillPool = null; poolR = 0; }
+  // v108: after a melt day the night turns cold again - a thin new skin creeps in from
+  // the pool's edges, duller and patchier than the v92 deep-winter skin
+  if (SEASON === 'snow') {
+    if (!refreezeOn && rillPool && poolR > 0.4 && dawnT >= 0.95) refreezeOn = true;
+    if (refreezeOn && rillPool) refreezeE = Math.min(1, refreezeE + dt / 75);
+    if (rillPool && refreezeE > 0.01) {
+      if (!skimGroup) {
+        skimGroup = new THREE.Group();
+        skimGroup.position.set(2.15, 0.0305, 6.25);
+        world.add(skimGroup);
+        for (let k = 0; k < 5; k++) {
+          const pa = 0.4 + k * 1.35, pr2 = 0.4 + 0.05 * Math.sin(k * 3.1);
+          const pm = new THREE.Mesh(skimPatchGeo, new THREE.MeshStandardMaterial({ color: 0xc8d2d8, roughness: 0.6, metalness: 0.05, emissive: 0x8794a0, emissiveIntensity: 0.12, transparent: true, opacity: 0 }));
+          pm.scale.set(0.8 + 0.3 * Math.sin(k * 2.3), 0.08, 0.7 + 0.3 * Math.cos(k * 1.9));
+          pm.position.set(Math.cos(pa) * pr2, 0, Math.sin(pa) * pr2);
+          skimGroup.add(pm);
+          skimPatches.push({ m: pm, th: 0.12 + k * 0.13, o: 0.34 + 0.14 * ((k * 37 % 10) / 10) });
+        }
+      }
+      skimGroup.scale.setScalar(poolR / 0.55);
+      if (Math.abs(refreezeE - lastRingE) > 0.02) { // the creeping edge: an annulus whose open eye shrinks as the cold bites
+        lastRingE = refreezeE;
+        const inner = Math.max(0.09, 0.58 * (1 - 0.9 * refreezeE));
+        if (skimRing) { skimGroup.remove(skimRing); skimRing.geometry.dispose(); }
+        skimRing = new THREE.Mesh(new THREE.RingGeometry(inner, 0.58, 26), skimRingMat);
+        skimRing.rotation.x = -Math.PI / 2;
+        skimGroup.add(skimRing);
+      }
+      if (skimRing) skimRing.material.opacity = 0.42 * Math.min(1, refreezeE * 2.5);
+      for (const p of skimPatches) p.m.material.opacity = p.o * Math.min(1, Math.max(0, (refreezeE - p.th) / 0.1));
+      if (!skimFilm && refreezeE > 0.8) {
+        skimFilm = new THREE.Mesh(skimFilmGeo, skimFilmMat);
+        skimFilm.rotation.x = -Math.PI / 2;
+        skimFilm.position.y = 0.001;
+        skimGroup.add(skimFilm);
+      }
+      if (skimFilm) skimFilm.material.opacity = 0.2 * Math.min(1, Math.max(0, (refreezeE - 0.8) / 0.2));
+    }
+  }
+
   updateMoths(T);
   // hanging things answer the breeze
   const sw = furinBreeze * furinBreeze;
@@ -2874,6 +2919,7 @@ window.__watchPos = () => { const p = breathPuffs.find(q => q.userData.watch); r
 window.__rillFill = () => { rillLen = 32; return rillLen; };
 window.__accFill = v => { humpAcc = Math.min(1, Math.max(0, +v)); applyAccum(); };
 window.__foxTracks = mode => { if (SEASON !== 'snow') return -1; traxLive = true; traxT0 = clock.elapsedTime - (mode === 'now' ? 99 : 0); return traxLive; };
+window.__refreeze = v => { if (SEASON !== 'snow') return -1; refreezeOn = true; refreezeE = Math.min(1, Math.max(0, +v)); return refreezeE; };
 window.__visit2 = () => { if (SEASON === 'snow') buildVisitorReturn(); return ret; };
 window.__breathPhase = v => { humpBreathPhase = +v; applyAccum(); return humpGrowMeshes.length > 1 ? +humpGrowMeshes[1].m.scale.y.toFixed(4) : -1; };
-window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, sag: +ropeSag.toFixed(3), slump: +slumpE.toFixed(2), slumpN: lanternThaw.length, weep: toriiWeep, cIceY: chozuIce ? +chozuIce.position.y.toFixed(3) : -1, cIceO: chozuIce ? +chozuIce.material.opacity.toFixed(2) : -1, slide: +slideE.toFixed(2), slideY: kairoSlides.length ? +kairoSlides[0].m.position.y.toFixed(2) : -1, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, watch: watchCount, watchP: breathPuffs.filter(p => p.userData.watch).length, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), iceRill: +iceLen.toFixed(1), paws, hump: snowHump, humpKoban, visitor, ret, pawV: pawPrints.filter(p => p.m.material.opacity > 0.01).length, spurOp: spurPrints.length ? +spurPrints[0].m.material.opacity.toFixed(3) : -1, ema2, emaY: humpEma ? +humpEma.plaque.position.y.toFixed(3) : -1, omiS, omiOp: humpOmi ? +humpOmi.material.opacity.toFixed(3) : -1, hoar: hoarNeedles.length, hoarE: +hoarE.toFixed(2), stir: +hoarStir.toFixed(2), stirs: stirCount, ray: +kobanRay.toFixed(2), kob2: humpKobanMesh2 ? +humpKobanMesh2.material.emissiveIntensity.toFixed(2) : -1, seal: +sealRay.toFixed(2), sealE: omiSealMat ? +omiSealMat.emissiveIntensity.toFixed(2) : -1, sas: sasRidges.length, sasM: +sasMig.toFixed(2), sasY: sasRidges.length ? +sasRidges[0].m.scale.y.toFixed(2) : -1, ig: iceGlints.length, igV: iceGlints.filter(g => g.m.visible).length, igE: +iceGlintE.toFixed(2), trax: foxTracks.length, traxR: foxTracks.filter(t => t.reveal > 0.99).length, traxO: foxTracks.length ? +foxTracks[0].m.material.opacity.toFixed(3) : -1, traxS: traxLive ? 2 : (traxArmed ? 1 : 0), plume: plumeMotes.length, plumes: plumeCount, acc: +humpAcc.toFixed(2), ribsY: humpGrowMeshes.length > 1 ? +humpGrowMeshes[1].m.scale.y.toFixed(4) : -1, accOp: visitorPrints.length ? +visitorPrints[0].m.material.opacity.toFixed(3) : -1 });
+window.__ls = () => ({ lit: litCount, rung: rungCount, cat: cat.state, catpos: cat.g.position.toArray(), done, streak: (localStorage.getItem('ls_streak') || '0'), koban: kobanHeld, given: kobanGiven, omi: omiDrawn.length, season: SEASON, clacks: emaClacks, eyes: +kitsuneGlow.toFixed(2), chorus: chorusBirds, rustles, tied: tiedStrips.length, moss: mossPostPatches, soot: sootBands, verd: verdPatches, beads: kitsuneBeads, dimples: kairoDimples, sway: +emaSwayMax.toFixed(3), swayF: +emaSwayFresh.toFixed(3), swayO: +emaSwayOld.toFixed(3), pools: lanterns.filter(l => l.pool && l.pool.material.opacity > 0.02).length, poolC: lanterns[0].pool.material.color.getHexString(), dawnE: +poolDawnE.toFixed(2), stripSway: +stripSwayMax.toFixed(3), sgate: +stripGateDbg.toFixed(3), rattle: furinRattles, fhus: furinHushed, ftink: furinTinkles, fbz: +furinBreeze.toFixed(2), flap: +stripFlapMax.toFixed(3), flapV: +stripVelMax.toFixed(2), spill: spillRings, brim: kairoDimples >= 400, spillOp: spillMats.length ? +spillThreads[0].opacity.toFixed(2) : -1, bias: +lastDimpleBias.toFixed(3), slant: +rainSlant.toFixed(3), waterR: chozuWater ? +chozuWater.roughness.toFixed(2) : -1, frost: chozuFrost ? +chozuFrost.material.opacity.toFixed(2) : 0, washes: basinWashes, hushed: basinHushed, snowBas: snowBasins, caps: snowCaps, lcaps: lanternCaps, tsnow: toriiSnow, lfrost: ladleFrost, fsnow: foxSnows, rsnow: emaRopeSnow, sag: +ropeSag.toFixed(3), slump: +slumpE.toFixed(2), slumpN: lanternThaw.length, weep: toriiWeep, cIceY: chozuIce ? +chozuIce.position.y.toFixed(3) : -1, cIceO: chozuIce ? +chozuIce.material.opacity.toFixed(2) : -1, slide: +slideE.toFixed(2), slideY: kairoSlides.length ? +kairoSlides[0].m.position.y.toFixed(2) : -1, ksnow: kairoSnow, kice, kfrost, ferns, ice: iceDrips, glint: glintCount, breath: breathCount, watch: watchCount, watchP: breathPuffs.filter(p => p.userData.watch).length, melt: meltCount, rill: +rillLen.toFixed(1), rillPool: +poolR.toFixed(2), iceRill: +iceLen.toFixed(1), paws, hump: snowHump, humpKoban, visitor, ret, pawV: pawPrints.filter(p => p.m.material.opacity > 0.01).length, spurOp: spurPrints.length ? +spurPrints[0].m.material.opacity.toFixed(3) : -1, ema2, emaY: humpEma ? +humpEma.plaque.position.y.toFixed(3) : -1, omiS, omiOp: humpOmi ? +humpOmi.material.opacity.toFixed(3) : -1, hoar: hoarNeedles.length, hoarE: +hoarE.toFixed(2), stir: +hoarStir.toFixed(2), stirs: stirCount, ray: +kobanRay.toFixed(2), kob2: humpKobanMesh2 ? +humpKobanMesh2.material.emissiveIntensity.toFixed(2) : -1, seal: +sealRay.toFixed(2), sealE: omiSealMat ? +omiSealMat.emissiveIntensity.toFixed(2) : -1, sas: sasRidges.length, sasM: +sasMig.toFixed(2), sasY: sasRidges.length ? +sasRidges[0].m.scale.y.toFixed(2) : -1, ig: iceGlints.length, igV: iceGlints.filter(g => g.m.visible).length, igE: +iceGlintE.toFixed(2), trax: foxTracks.length, traxR: foxTracks.filter(t => t.reveal > 0.99).length, traxO: foxTracks.length ? +foxTracks[0].m.material.opacity.toFixed(3) : -1, traxS: traxLive ? 2 : (traxArmed ? 1 : 0), skim: skimPatches.length + (skimRing ? 1 : 0) + (skimFilm ? 1 : 0), skimE: +refreezeE.toFixed(2), skimP: rillPool ? +rillPoolMat.emissiveIntensity.toFixed(2) : -1, plume: plumeMotes.length, plumes: plumeCount, acc: +humpAcc.toFixed(2), ribsY: humpGrowMeshes.length > 1 ? +humpGrowMeshes[1].m.scale.y.toFixed(4) : -1, accOp: visitorPrints.length ? +visitorPrints[0].m.material.opacity.toFixed(3) : -1 });
